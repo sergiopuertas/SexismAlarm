@@ -3,3 +3,6 @@ src/data/
 
 # Docs
 doc/
+
+# .DS_Store
+.DS_Store
