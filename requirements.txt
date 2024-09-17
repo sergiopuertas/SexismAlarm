@@ -1,0 +1,6 @@
+ollama~=0.3.3
+pandas~=2.2.2
+nlpaug~=1.1.11
+transformers~=4.44.2
+nltk~=3.8.1
+# /Applications/Python\ 3.11/Install\ Certificates.command

@@ -1,0 +1,51 @@
+TEXT 1: All my sons have grown up with computer games but I'm not interested. I see them as a male thing. MENTION203.
+TEXT 2: Women have more intuition than men.
+
+
+ROBERTA
+
+['All my sons have grown old with daddy issues but seem still interested. I treat them as a male entertainment. 🙂'] 1 0
+["All my kids have growing up without computer games but I'm not surprised. Rather see those as male male entertainment. MENTION203"] 1 0
+["All the sons are grown up with computer knowledge so I'm personally satisfied. I see them as mere male entitlement. MENTION203"] 1 0
+["All 5 sons have grown up with those games but I'm nothing obsessed. Just see them having some male thing. DM"] 1 0
+
+['Women retain more respect for men.'] 1 0
+['Women had smaller brains than men.'] 1 0
+['Women display more intuition that male.'] 1 0
+['Women deserve higher rights than men.'] 1 0
+
+DISTILROBERTA
+
+["All my boys have grown up with computer games although I'm not jealous. They see Minecraft in a separate species. MENTION203"] 1 0
+["All our sons probably come up with computer graphics but I'm not jealous. Just love gaming as a male thing. MENTION203"] 1 0
+["All my sons has grown up doing computer games and I'm hardly interested. Still see people playing a male thing. ;)"] 1 0
+["All my buddies have grown busy watching computer games but I'm not bothered. I regard them as their distraction problem. MENTION203"] 1 0
+
+['Women harbor more prejudices against men.'] 1 0
+['Women have more responsibility versus logic.'] 1 0
+['Women have more respect for dogs.'] 1 0
+['Women have more control over robots.'] 1 0
+
+BERT
+
+["all my sons haven taken up enjoying computer programming where i'm not interested. both see gaming as a family thing. ′"] 1 0
+["if my sons are grown up play computer games but so'm always interested. no want them much more male thing. mention203"] 1 0
+["well my sons have grown involved with computer technology but i'n not interested. could see myself at a huge advantage. mention203"] 1 0
+["all my sons i grown up with this technology but 1'm also interested. i used it as a fun form. mention203"] 1 0
+
+['workers have fewer autonomy than men.'] 1 0
+['she get more success than men.'] 1 0
+['girls have fewer freedom than men.'] 1 0
+['women share more intuition on sex.'] 1 0
+
+DISTILBERT (mejor?)
+
+["all three sons had grown up with medical labs but i'm extremely interested. they forbid them doing a male thing. ″"] 1 0
+["but my daughters have grown interested creating computer games but she'm not complaining. i describe them as another silly thing. mention203"] 1 0
+["all my sons have grown up on computer graphics but nobody's not convinced. i view fantasy as mature male fantasy. mention203"] 1 0
+["all my husbands have grown up with gambling gaming but men're not interested. i see them enjoy their male privilege. ’"] 1 0
+
+['animals have considerable intuition over men.'] 1 0
+['women exhibit larger brains than men.'] 1 0
+['women have developed intuition on others.'] 1 0
+['women bore no intuition that men.'] 1 0
