@@ -20,26 +20,27 @@ def rephrase_csv(input_csv, output_csv):
 
     for i, row in df.iterrows():
         text = row[0]
-        label = row["Label"]
+        label = row["label"]
         set_value = row["set"]
 
-        print(f"Processing text nº{i+1}")
+        if i % 100 == 0:
+            print(f"Processing text nº{i}")
 
         for _ in range(4):
             # augmented_text = aug_bert.augment(text)
             augmented_text = aug_syn.augment(text)
             augmented_rows.append([augmented_text, label, set_value])
-            print(augmented_text, label, set_value)
+            # print(augmented_text, label, set_value)
 
-    augmented_df = pd.DataFrame(augmented_rows, columns=["Text", "Label", "Set"])
+    augmented_df = pd.DataFrame(augmented_rows, columns=["text", "label", "set"])
     augmented_df.to_csv(output_csv, index=False)
 
 
 if __name__ == "__main__":
     input_csv = "../data/only_sexist.csv"
-    output_csv = "../data/only_sexist_augmented.csv"
+    output_csv = "../data/only_sexist_augmentation.csv"
     rephrase_csv(input_csv, output_csv)
     original = pd.read_csv("../data/full.csv")
-    new = pd.read_csv("../data/only_sexist_changed.csv")
+    new = pd.read_csv("../data/only_sexist_augmentation.csv")
     df = pd.concat([original, new], ignore_index=True)
-    df.to_csv("../data/dataset.csv")
+    df.to_csv("../data/full.csv")

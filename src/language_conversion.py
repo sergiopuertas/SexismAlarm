@@ -1,4 +1,3 @@
-import langdetect
 from langdetect import detect
 import sys
 from transformers import *
