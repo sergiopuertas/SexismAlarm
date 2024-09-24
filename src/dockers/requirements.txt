@@ -6,5 +6,10 @@ nltk~=3.8.1
 langdetect~=1.0.9
 sentencepiece
 contractions
-# sacremoses
+torch
+numpy
+pandas
+tqdm
+scikit-learn
+wandb
 # /Applications/Python\ 3.11/Install\ Certificates.command

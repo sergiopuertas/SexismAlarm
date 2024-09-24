@@ -1,9 +1,6 @@
-from string import punctuation
-
 import nltk
 from nltk.corpus import wordnet
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 import pandas as pd
 import contractions
 import re
@@ -78,6 +75,7 @@ def clean_txt(text):
 
 def clean_csv(input_csv, output_csv):
     df = pd.read_csv(input_csv)
+
     synth_rows = list()
     for i, row in df.iterrows():
         text = row["text"]
@@ -90,6 +88,7 @@ def clean_csv(input_csv, output_csv):
         synth_rows.append([clean_text, label, set_value])
 
     augmented_df = pd.DataFrame(synth_rows, columns=["text", "label", "set"])
+
     augmented_df.to_csv(output_csv, index=False)
 
 
