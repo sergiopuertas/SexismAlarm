@@ -19,7 +19,7 @@ def runmodel(c):
 @task
 def model(c):
     c.run("docker build -t model-train -f dockers/ModelDockerfile .")
-    c.run("docker run --rm model-train")
+    c.run('docker run --rm --memory="64g" --cpus="10" model-train')
 
 
 # @task
