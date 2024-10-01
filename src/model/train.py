@@ -16,10 +16,11 @@ image_path = "./data/"
 # Hyperparameters
 emb_dim = 200
 num_epochs = 20
-batch_size = 16
+batch_size = 32
 learning_rate = 1e-3
 weight_decay = 1e-5
 device = "cuda" if torch.cuda.is_available() else "cpu"
+dropout = 0.4
 
 
 def extract_divide_data():
@@ -29,7 +30,7 @@ def extract_divide_data():
         Tuple: Text and label data for training, validation, and test sets.
     """
     seed = 33
-    df = pd.read_csv(f"../data/dataset.csv")
+    df = pd.read_csv(f"data/dataset.csv")
     df = df.dropna(
         subset=["text", "label"]
     )  # Remove rows with missing 'text' or 'label'
@@ -96,7 +97,7 @@ def create_weights_matrix(vocab, vocab_size):
     Returns:
         torch.FloatTensor: Embedding matrix with GloVe vectors.
     """
-    embeddings = load_embeddings(f"glove.twitter.27B.200d.txt")
+    embeddings = load_embeddings(f"model/glove.twitter.27B.200d.txt")
     emb_mat = np.zeros((vocab_size, emb_dim))
     for word, i in vocab.items():
         if word in embeddings:
@@ -236,7 +237,11 @@ def main():
     """
     Main function to execute the training process.
     """
-    wandb.login(key="4214f82ec374269100f3741c98252559627e3173")
+    # Leer la clave API desde el archivo key.txt
+    with open("key.txt", "r", encoding="UTF-8") as f:
+        wandb_key = f.read().strip()
+
+    wandb.login(key=wandb_key)
 
     # Load and prepare the data
     df, X_train, y_train, X_test, y_test, X_val, y_val = extract_divide_data()
@@ -244,7 +249,10 @@ def main():
 
     # Create embedding weights and initialize the model
     weights = create_weights_matrix(vocab, vocab_size)
-    model = LSTMModel(emb_dim, weights).to(device)
+    pretrained_embeddings = torch.FloatTensor(weights)
+
+    # Crear el modelo pasando los embeddings preentrenados
+    model = LSTMModel(emb_dim, pretrained_embeddings, dropout).to(device)
 
     # Prepare data loaders for training, validation, and test
     train_loader, val_loader, test_loader = prepare_loaders(

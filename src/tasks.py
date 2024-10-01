@@ -2,25 +2,35 @@ from invoke import task
 
 
 @task
+def activate(c):
+    c.run("source venv/bin/activate")
+
+
+@task
 def requirements(c):
-    c.run("docker build -t requirements -f dockers/ReqDockerfile .")
+    c.run("docker build -t requirements -f docker/ReqDockerfile .")
 
 
 @task
-def buildmodel(c):
-    c.run("docker build -t model-train -f dockers/ModelDockerfile .")
+def similarity(c, build=False):
+    if build:
+        c.run("docker build -f docker/SimDockerfile -t similarity-app .")
+
+    first = input("Enter the first sentence: ")
+    second = input("Enter the second sentence: ")
+
+    c.run(
+        f"docker run -v hug_model:/models similarity-app python /app/similarity.py '{first}' '{second}'"
+    )
 
 
 @task
-def runmodel(c):
-    c.run("docker run --rm model-train")
-
-
-@task
-def model(c):
-    c.run("docker build -t model-train -f dockers/ModelDockerfile .")
-    c.run('docker run --rm --memory="64g" --cpus="10" model-train')
+def model(c, test=False):
+    if test:
+        c.run("python model/test.py")
+    else:
+        c.run("python model/train.py")
 
 
 # @task
-# def run(c):
+#  def run(c):

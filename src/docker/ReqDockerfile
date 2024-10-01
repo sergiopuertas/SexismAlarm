@@ -5,6 +5,5 @@ RUN mkdir -p /app/data
 WORKDIR /app
 
 COPY dockers/requirements.txt .
-# COPY model/glove.twitter.27B.200d.txt ./data/
 
 RUN pip install -r requirements.txt

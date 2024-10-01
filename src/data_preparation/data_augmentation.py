@@ -26,7 +26,7 @@ def rephrase_csv(input_csv, output_csv):
         if i % 100 == 0:
             print(f"Processing text nº{i}")
 
-        for _ in range(4):
+        for _ in range(3):
             # augmented_text = aug_bert.augment(text)
             augmented_text = aug_syn.augment(text)
             augmented_rows.append([augmented_text, label, set_value])
