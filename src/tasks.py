@@ -2,8 +2,13 @@ from invoke import task
 
 
 @task
-def activate(c):
-    c.run("source venv/bin/activate")
+def augment(c):
+    c.run("python data_preparation/data_augmentation.py")
+
+
+@task
+def clean(c):
+    c.run("python data_preparation/data_cleaning.py")
 
 
 @task
@@ -20,16 +25,18 @@ def similarity(c, build=False):
     second = input("Enter the second sentence: ")
 
     c.run(
-        f"docker run -v hug_model:/models similarity-app python /app/similarity.py '{first}' '{second}'"
+        f"docker run -v hug_model:/app/huggingface similarity-app python /app/similarity.py '{first}' '{second}'"
     )
 
 
 @task
-def model(c, test=False):
-    if test:
+def model(c, test=False, emmbeddings=False):
+    if emmbeddings:
+        c.run("python model/train/embed_load.py")
+    elif test:
         c.run("python model/test.py")
     else:
-        c.run("python model/train.py")
+        c.run("python -m model.train.train")
 
 
 # @task

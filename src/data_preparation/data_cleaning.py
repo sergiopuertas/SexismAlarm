@@ -82,7 +82,7 @@ def clean_csv(input_csv, output_csv):
         label = row["label"]
         set_value = row["set"]
         if i % 1000 == 0:
-            print(f"Processing text nº{i+1}")
+            print(f"Processing text nº{i}")
 
         clean_text = clean_txt(text)
         synth_rows.append([clean_text, label, set_value])
@@ -93,6 +93,6 @@ def clean_csv(input_csv, output_csv):
 
 
 if __name__ == "__main__":
-    input_csv = "../data/full.csv"
-    output_csv = "../data/dataset.csv"
+    input_csv = "data/full.csv"
+    output_csv = "data/dataset.csv"
     clean_csv(input_csv, output_csv)

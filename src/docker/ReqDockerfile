@@ -4,6 +4,6 @@ LABEL authors="zehiu"
 RUN mkdir -p /app/data
 WORKDIR /app
 
-COPY dockers/requirements.txt .
+COPY docker/requirements.txt .
 
 RUN pip install -r requirements.txt

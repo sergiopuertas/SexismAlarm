@@ -1,26 +1,13 @@
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
-import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import CountVectorizer
 from torch.utils.data import DataLoader, TensorDataset
-from tqdm import tqdm
-import wandb
-from torch.optim.lr_scheduler import StepLR
-from model import LSTMModel
-
-image_path = "./data/"
 
 # Hyperparameters
 emb_dim = 200
-num_epochs = 20
 batch_size = 32
-learning_rate = 1e-3
-weight_decay = 1e-5
-device = "cuda" if torch.cuda.is_available() else "cpu"
-dropout = 0.4
 
 
 def extract_divide_data():
@@ -97,7 +84,7 @@ def create_weights_matrix(vocab, vocab_size):
     Returns:
         torch.FloatTensor: Embedding matrix with GloVe vectors.
     """
-    embeddings = load_embeddings(f"model/glove.twitter.27B.200d.txt")
+    embeddings = load_embeddings(f"model/train/glove.twitter.27B.200d.txt")
     emb_mat = np.zeros((vocab_size, emb_dim))
     for word, i in vocab.items():
         if word in embeddings:
@@ -152,116 +139,23 @@ def prepare_loaders(vectorizer, X_train, y_train, X_val, y_val, X_test, y_test):
     return train_loader, val_loader, test_loader
 
 
-def train_model(device, train_loader, val_loader, model):
-    """
-    Train the LSTM model using the provided data loaders.
-    Args:
-        device (str): Device to train the model on ('cpu' or 'cuda').
-        train_loader (DataLoader): DataLoader for the training data.
-        val_loader (DataLoader): DataLoader for the validation data.
-        model (torch.nn.Module): LSTM model.
-    """
-    optimizer = optim.Adam(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
-    )
-    # Learning rate scheduler to reduce LR during training
-    scheduler = StepLR(optimizer, step_size=5, gamma=0.15)
-
-    # Initialize Weights & Biases logging
-    wandb.init(project="sexism_detector_lstm")
-
-    best_val_loss = float("inf")
-    patience = 4
-    patience_counter = 0
-
-    for epoch in range(num_epochs):
-        model.train()
-        epoch_loss = 0
-        for texts, labels in tqdm(train_loader):
-            texts = texts.to(device)
-            labels = labels.float().to(device)
-
-            # Forward pass
-            outputs = model(texts)
-            loss = nn.BCELoss()(outputs.squeeze(), labels)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            epoch_loss += loss.item()
-
-        epoch_loss /= len(train_loader)
-        val_loss = validate_model(model, val_loader)
-        print(
-            f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss:.4f}, Validation Loss: {val_loss:.4f}"
-        )
-
-        wandb.log({"loss": epoch_loss, "val_loss": val_loss})
-        scheduler.step()
-
-        # Early stopping
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            patience_counter = 0
-            torch.save(model.state_dict(), "model_trained.pth")
-        else:
-            patience_counter += 1
-            if patience_counter >= patience:
-                print("Early stopping triggered.")
-                break
-
-
-def validate_model(model, val_loader):
-    """
-    Validate the model on the validation set.
-    Args:
-        model (torch.nn.Module): Trained model.
-        val_loader (DataLoader): DataLoader for the validation data.
-    Returns:
-        float: Validation loss.
-    """
-    model.eval()  # Set the model to evaluation mode
-    val_loss = 0
-    with torch.no_grad():
-        for texts, labels in val_loader:
-            texts = texts.to(device)
-            labels = labels.float().to(device)
-            outputs = model(texts)
-            loss = nn.BCELoss()(outputs.squeeze(), labels)
-            val_loss += loss.item()
-    return val_loss / len(val_loader)
-
-
 def main():
-    """
-    Main function to execute the training process.
-    """
-    # Leer la clave API desde el archivo key.txt
-    with open("key.txt", "r", encoding="UTF-8") as f:
-        wandb_key = f.read().strip()
-
-    wandb.login(key=wandb_key)
-
     # Load and prepare the data
     df, X_train, y_train, X_test, y_test, X_val, y_val = extract_divide_data()
     vectorizer, vocab, vocab_size = vectorize_data(df)
 
-    # Create embedding weights and initialize the model
+    # Create embedding weights
     weights = create_weights_matrix(vocab, vocab_size)
     pretrained_embeddings = torch.FloatTensor(weights)
 
-    # Crear el modelo pasando los embeddings preentrenados
-    model = LSTMModel(emb_dim, pretrained_embeddings, dropout).to(device)
-
-    # Prepare data loaders for training, validation, and test
+    # Prepare data loaders
     train_loader, val_loader, test_loader = prepare_loaders(
         vectorizer, X_train, y_train, X_val, y_val, X_test, y_test
     )
-    torch.save(test_loader, "test_loader.pth")
-
-    # Train the model
-    train_model(device, train_loader, val_loader, model)
+    torch.save(pretrained_embeddings, "model/train/embeddings.pt")
+    torch.save(train_loader, "model/train/train_loader.pt")
+    torch.save(train_loader, "model/train/val_loader.pt")
+    torch.save(train_loader, "model/test_loader.pt")
 
 
 if __name__ == "__main__":

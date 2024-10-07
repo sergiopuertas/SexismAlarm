@@ -147,7 +147,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Load model
-    model_path = "model_trained.pth"
+    model_path = "model_trained.pt"
     model = load_model(model_path, device)
 
     y_pred, y_true = get_predictions(model, test_loader, device)

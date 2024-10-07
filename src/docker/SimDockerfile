@@ -1,14 +1,11 @@
 FROM requirements
 
-# Create the directory where models will be stored
-RUN mkdir -p /models/huggingface/sentence-transformers/all-mpnet-base-v2
+RUN mkdir -p app/huggingface/sentence-transformers/all-mpnet-base-v2
+ENV MODEL_ID sentence-transformers/all-mpnet-base-v2
 
-# Copy the script similarity.py to the container
-COPY model/similarity.py /app/similarity.py
-COPY model/models/huggingface/sentence-transformers/all-mpnet-base-v2 /models/huggingface/sentence-transformers/all-mpnet-base-v2
+COPY deployment/context/huggingface/sentence-transformers/all-mpnet-base-v2 app/huggingface/sentence-transformers/all-mpnet-base-v2
+COPY deployment/context/similarity.py /app/similarity.py
 
-# Set the working directory
 WORKDIR /app
 
-# Specify the default command to run when starting the container
-CMD ["python", "similarity.py"]
+CMD ["python similarity.py"]

@@ -19,7 +19,7 @@ def rephrase_csv(input_csv, output_csv):
     augmented_rows = []
 
     for i, row in df.iterrows():
-        text = row[0]
+        text = row.iloc[0]
         label = row["label"]
         set_value = row["set"]
 
@@ -37,10 +37,11 @@ def rephrase_csv(input_csv, output_csv):
 
 
 if __name__ == "__main__":
-    input_csv = "../data/only_sexist.csv"
-    output_csv = "../data/only_sexist_augmentation.csv"
+    input_csv = "data/only_sexist.csv"
+    output_csv = "data/only_sexist_augmentation.csv"
+    original = pd.read_csv("data/full.csv")
+
     rephrase_csv(input_csv, output_csv)
-    original = pd.read_csv("../data/full.csv")
-    new = pd.read_csv("../data/only_sexist_augmentation.csv")
+    new = pd.read_csv(output_csv)
     df = pd.concat([original, new], ignore_index=True)
-    df.to_csv("../data/full.csv")
+    df.to_csv("data/full.csv")
