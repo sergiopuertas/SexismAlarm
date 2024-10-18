@@ -14,3 +14,4 @@ sentence-transformers~=2.2.2  # Compatibilidad con transformers recientes
 tensorflow==2.13.1  # TensorFlow ya incluye Keras
 transformers==4.29.0  # Compatible con tensorflow 2.13.x y torch
 huggingface-hub~=0.16.4  # Compatible con transformers
+ekphrasis
