@@ -127,3 +127,5 @@ irl: in real life,
 bruh: bro / brother,
 tho: though,
 fam: family
+nsw: non sexual way
+ya: you
