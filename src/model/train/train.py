@@ -1,114 +1,105 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed import init_process_group, destroy_process_group
-import os
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 import wandb
 from torch.optim.lr_scheduler import StepLR
 from ..model import LSTMModel
 
+# Hyperparameters
+emb_dim = 200
+num_epochs = 5
+batch_size = 32
+learning_rate = 1e-3
+weight_decay = 1e-5
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dropout = 0.4
 
-def setup(rank, world_size):
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
-    init_process_group("nccl", rank=rank, world_size=world_size)
 
+def train_model(device, train_loader, val_loader, model):
+    """
+    Train the LSTM model using the provided data loaders.
+    Args:
+        device (str): Device to train the model on ('cpu' or 'cuda').
+        train_loader (DataLoader): DataLoader for the training data.
+        val_loader (DataLoader): DataLoader for the validation data.
+        model (torch.nn.Module): LSTM model.
+    """
+    optimizer = optim.Adam(
+        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+    )
+    # Learning rate scheduler to reduce LR during training
+    scheduler = StepLR(optimizer, step_size=2, gamma=0.15)
 
-def cleanup():
-    destroy_process_group()
+    # Initialize Weights & Biases logging
+    wandb.init(project="sexism_detector_lstm")
 
+    best_val_loss = float("inf")
+    patience = 4
+    patience_counter = 0
 
-def train_model(config=None):
-    with wandb.init(config=config) as run:
-        config = wandb.config
+    for epoch in range(num_epochs):
+        model.train()
+        epoch_loss = 0
+        for texts, labels in tqdm(train_loader):
+            texts = texts.to(device)
+            labels = labels.float().to(device)
 
-        world_size = torch.cuda.device_count()
-        rank = int(os.environ.get("LOCAL_RANK", 0))
+            # Forward pass
+            outputs = model(texts)
+            loss = nn.BCELoss()(outputs.squeeze(), labels)
 
-        setup(rank, world_size)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-        device = torch.device(f"cuda:{rank}" if torch.cuda.is_available() else "cpu")
+            epoch_loss += loss.item()
 
-        # Load data and model
-        path = "model/train/"
-        train_dataset = torch.load(f"{path}train_dataset.pt")
-        val_dataset = torch.load(f"{path}val_dataset.pt")
-        pretrained_embeddings = torch.load(f"{path}embeddings.pt")
-
-        model = LSTMModel(config.emb_dim, pretrained_embeddings, config.dropout)
-        model = model.to(device)
-        model = DDP(model, device_ids=[rank])
-
-        train_sampler = DistributedSampler(
-            train_dataset, num_replicas=world_size, rank=rank
+        epoch_loss /= len(train_loader)
+        val_loss = validate_model(model, val_loader)
+        print(
+            f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss:.4f}, Validation Loss: {val_loss:.4f}"
         )
-        train_loader = DataLoader(
-            train_dataset, batch_size=config.batch_size, sampler=train_sampler
-        )
-        val_loader = DataLoader(val_dataset, batch_size=config.batch_size)
 
-        optimizer = optim.Adam(
-            model.parameters(),
-            lr=config.learning_rate,
-            weight_decay=config.weight_decay,
-        )
-        scheduler = StepLR(optimizer, step_size=2, gamma=config.lr_decay)
+        wandb.log({"loss": epoch_loss, "val_loss": val_loss})
+        scheduler.step()
 
-        best_val_loss = float("inf")
-        for epoch in range(config.epochs):
-            model.train()
-            epoch_loss = 0
-            for texts, labels in tqdm(train_loader):
-                texts, labels = texts.to(device), labels.float().to(device)
-
-                outputs = model(texts)
-                loss = nn.BCELoss()(outputs.squeeze(), labels)
-
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-                epoch_loss += loss.item()
-
-            epoch_loss /= len(train_loader)
-            val_loss = validate_model(model, val_loader, device)
-
-            if rank == 0:
-                wandb.log(
-                    {"epoch": epoch, "train_loss": epoch_loss, "val_loss": val_loss}
-                )
-
-                # Guardar el modelo si es el mejor hasta ahora
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    model_path = (
-                        f"{path}model_checkpoints/model_{run.id}_epoch_{epoch}.pt"
-                    )
-                    torch.save(
-                        {
-                            "epoch": epoch,
-                            "model_state_dict": model.module.state_dict(),
-                            "optimizer_state_dict": optimizer.state_dict(),
-                            "val_loss": val_loss,
-                        },
-                        model_path,
-                    )
-                    wandb.save(model_path)  # Esto subirá el archivo a wandb
-
-            scheduler.step()
-
-        cleanup()
+        # Early stopping
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "loss": best_val_loss,
+                },
+                "model_trained.pth",
+            )
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print("Early stopping triggered.")
+                break
 
 
-def validate_model(model, val_loader, device):
-    model.eval()
+def validate_model(model, val_loader):
+    """
+    Validate the model on the validation set.
+    Args:
+        model (torch.nn.Module): Trained model.
+        val_loader (DataLoader): DataLoader for the validation data.
+    Returns:
+        float: Validation loss.
+    """
+    model.eval()  # Set the model to evaluation mode
     val_loss = 0
     with torch.no_grad():
         for texts, labels in val_loader:
-            texts, labels = texts.to(device), labels.float().to(device)
+            texts = texts.to(device)
+            labels = labels.float().to(device)
             outputs = model(texts)
             loss = nn.BCELoss()(outputs.squeeze(), labels)
             val_loss += loss.item()
@@ -116,29 +107,24 @@ def validate_model(model, val_loader, device):
 
 
 def main():
-    with open("..key.txt", "r", encoding="UTF-8") as f:
+    """
+    Main function to execute the training process.
+    """
+    # Leer la clave API desde el archivo key.txt
+    path = "model/train/"
+    with open("key.txt", "r", encoding="UTF-8") as f:
         wandb_key = f.read().strip()
+
     wandb.login(key=wandb_key)
 
-    # Asegúrate de que el directorio para los checkpoints existe
-    os.makedirs("model/train/model_checkpoints", exist_ok=True)
+    train_loader = torch.load(f"{path}train_loader.pt")
+    val_loader = torch.load(f"{path}val_loader.pt")
+    pretrained_embeddings = torch.load(f"{path}embeddings.pt")
 
-    sweep_config = {
-        "method": "random",
-        "metric": {"name": "val_loss", "goal": "minimize"},
-        "parameters": {
-            "learning_rate": {"min": 1e-4, "max": 1e-3},
-            "dropout": {"min": 0.2, "max": 0.5},
-            "weight_decay": {"min": 1e-6, "max": 1e-4},
-            "lr_decay": {"min": 0.1, "max": 0.5},
-            "epochs": {"value": 5},
-            "batch_size": {"values": [32, 64, 128]},
-            "emb_dim": {"values": [100, 200, 300]},
-        },
-    }
+    model = LSTMModel(emb_dim, pretrained_embeddings, dropout).to(device)
 
-    sweep_id = wandb.sweep(sweep_config, project="sexism_detector_lstm_distributed")
-    wandb.agent(sweep_id, train_model, count=5)
+    # Train the model
+    train_model(device, train_loader, val_loader, model)
 
 
 if __name__ == "__main__":
