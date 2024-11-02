@@ -30,13 +30,11 @@ def similarity(c, build=False):
 
 
 @task
-def model(c, test=False, emmbeddings=False):
-    if emmbeddings:
-        c.run("python model/train/embed_load.py")
-    elif test:
+def model(c, test=False):
+    if test:
         c.run("python model/test.py")
     else:
-        c.run("python -m model.train.train")
+        c.run("python model/train.py")
 
 
 # @task

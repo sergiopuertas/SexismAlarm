@@ -1,4 +1,5 @@
 import torch
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,8 +15,13 @@ from sklearn.metrics import (
     auc,
     precision_recall_curve,
 )
+from .train.train import prepare_loaders
+from sklearn.model_selection import KFold
+from model import LSTMModel
+from tqdm import tqdm
 
-test_loader = torch.load("test_loader.pth")
+embed_dim = 200
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def load_model(model_path, device):
@@ -27,7 +33,12 @@ def load_model(model_path, device):
     Returns:
         torch.nn.Module: The loaded model.
     """
-    model = torch.load(model_path)
+    model = LSTMModel(
+        embed_dim, pretrained_embeddings=torch.load("model/train/embeddings.pt")
+    )
+    model.load_state_dict(
+        torch.load(model_path, map_location=device)["model_state_dict"]
+    )
     model.to(device)
     model.eval()  # Set model to evaluation mode
     return model
@@ -46,7 +57,7 @@ def get_predictions(model, loader, device):
     all_preds = []
     all_labels = []
     with torch.no_grad():
-        for inputs, labels in loader:
+        for inputs, labels in tqdm(loader):
             inputs = inputs.to(device)
             outputs = model(inputs)
             preds = torch.round(outputs).cpu().numpy()  # Round for binary predictions
@@ -140,22 +151,54 @@ def evaluate_model(y_true, y_pred, y_pred_proba):
     plot_precision_recall_curve(y_true, y_pred_proba)
 
 
+def predict_phrase(model, vocab, text):
+    text = torch.tensor(vocab[text.split()], device=device)
+    label = torch.argmax(model(text.reshape(1, -1)), dim=1)
+    return "sexist" if label == 1 else "non sexist"
+
+
 def main():
     """
-    Main function to load the model, make predictions, and evaluate the model.
+    Main function to load the model, perform cross-validation, and evaluate the model.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Load model
-    model_path = "model_trained.pt"
+    model_path = "model/model_trained.pth"  # Asegúrate de que la ruta sea correcta
     model = load_model(model_path, device)
 
-    y_pred, y_true = get_predictions(model, test_loader, device)
-    y_pred_proba = (
-        y_pred  # Adjust if your model outputs logits instead of probabilities
-    )
+    # Load your dataset
+    df = pd.read_csv("data/dataset.csv")
+    df = df.dropna(subset=["text", "label"])  # Clean the dataset
+    X = df["text"].tolist()
+    y = df["label"].tolist()
+    vectorizer = torch.load("model/vectorizer.pt")
 
-    evaluate_model(y_true, y_pred, y_pred_proba)
+    # Define KFold cross-validation
+    kf = KFold(n_splits=5, shuffle=True, random_state=33)
+
+    all_preds = []
+    all_true = []
+
+    for fold, (train_index, test_index) in enumerate(kf.split(X)):
+        # Split data
+        X_train, X_test = [X[i] for i in train_index], [X[i] for i in test_index]
+        y_train, y_test = [y[i] for i in train_index], [y[i] for i in test_index]
+
+        # Prepare loaders for the current fold
+        _, test_loader = prepare_loaders(vectorizer, X_train, y_train, X_test, y_test)
+        # Get predictions for the current fold
+        y_pred, y_true = get_predictions(model, test_loader, device)
+        y_pred_proba = y_pred
+
+        # Store predictions and true labels
+        all_preds.extend(y_pred)
+        all_true.extend(y_true)
+
+        evaluate_model(y_true, y_pred, y_pred_proba)
+
+    overall_accuracy = accuracy_score(all_true, all_preds)
+    print(f"Overall Accuracy across all folds: {overall_accuracy:.4f}")
 
 
 if __name__ == "__main__":

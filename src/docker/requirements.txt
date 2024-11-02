@@ -6,7 +6,7 @@ langdetect~=1.0.9
 sentencepiece
 contractions
 torch~=2.0.1  # Compatibilidad con transformers y tensorflow
-numpy~=1.24.3  # Compatible con Python 3.11
+numpy==1.24.3
 tqdm~=4.65.0   # Barra de progreso
 scikit-learn~=1.2.2
 wandb~=0.15.5
@@ -15,3 +15,5 @@ tensorflow==2.13.1  # TensorFlow ya incluye Keras
 transformers==4.29.0  # Compatible con tensorflow 2.13.x y torch
 huggingface-hub~=0.16.4  # Compatible con transformers
 ekphrasis
+d2l
+keras-preprocessing
