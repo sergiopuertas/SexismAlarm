@@ -78,6 +78,8 @@ def clean_txt(text, abbreviation_dict):
     clean_text = "".join(
         text_processor.pre_process_doc(clean_text)
     )  # Procesar con ekphrasis
+    clean_text = [re.sub(r"mention\d+", "mention", word) for word in clean_text]
+    clean_text = "".join(clean_text)
     clean_text = expand_abbreviations(clean_text, abbreviation_dict)
     pattern = re.compile(
         r"[{}()\[\]<>*]"

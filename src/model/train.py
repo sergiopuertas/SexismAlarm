@@ -1,31 +1,24 @@
 import os
-import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.cuda.amp as amp
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import wandb
 from torch.optim.lr_scheduler import StepLR
 from sklearn.model_selection import train_test_split
-from model import LSTMModel, clip_gradients, init_weights
-from token_emb import TokenEmbedding
+from model import LSTMModel
 from dataset import TextDataset
-from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 
 # Hyperparameters
-emb_dim = 200
-batch_size = 2
-num_epochs = 5
+batch_size = 32
+num_epochs = 10
 learning_rate = 5e-3
 weight_decay = 1e-5
 device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
-
-dropout = 0.4
 
 
 def extract_divide_data():
@@ -34,12 +27,12 @@ def extract_divide_data():
     Returns:
         Tuple: Text and label data for training, validation, and test sets.
     """
-    seed = 33
+    seed = 141223
     df = pd.read_csv(f"data/dataset.csv")
     df = df.dropna(subset=["text", "label"])
 
     X_train, X_val = train_test_split(
-        df, train_size=0.9, test_size=0.1, shuffle=True, random_state=seed
+        df, train_size=0.8, test_size=0.2, shuffle=True, random_state=seed
     )
     return (
         X_train["text"].tolist(),
@@ -49,28 +42,35 @@ def extract_divide_data():
     )
 
 
-def tokenize_input(X_train, X_val, MAX_NB_WORDS=75000, MAX_SEQUENCE_LENGTH=500):
-    np.random.seed(33)
-    text = np.concatenate((X_train, X_val), axis=0)
+def tokenize_input(X_train, X_val, padding_word="PAD"):
+    max_sequence_length = max(len(x) for x in X_train + X_val)
+    X_train_tokens = [x.split() for x in X_train]
+    X_val_tokens = [x.split() for x in X_val]
 
-    tokenizer = Tokenizer(num_words=MAX_NB_WORDS)
-    tokenizer.fit_on_texts(text)
-    sequences = tokenizer.texts_to_sequences(text)
-    word_index = tokenizer.word_index
-    print("Found %s unique tokens." % len(word_index))
+    text_tokens = X_train_tokens + X_val_tokens
 
-    text_padded = pad_sequences(sequences, maxlen=MAX_SEQUENCE_LENGTH)
+    text_padded = pad_sequences(
+        text_tokens,
+        maxlen=max_sequence_length,
+        padding="post",
+        value=padding_word,
+        dtype=object,
+    )
 
     X_train_padded = text_padded[: len(X_train)]
     X_val_padded = text_padded[len(X_train) :]
 
-    return X_train_padded, X_val_padded, word_index
+    return X_train_padded, X_val_padded
 
 
-def prepare_loaders(X_train, y_train, X_val, y_val):
+def prepare_loaders():
     """
     Prepara los DataLoaders para entrenamiento y validación.
     """
+    X_train, y_train, X_val, y_val = extract_divide_data()
+
+    X_train, X_val = tokenize_input(X_train, X_val)
+
     train_dataset = TextDataset(X_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
@@ -79,16 +79,15 @@ def prepare_loaders(X_train, y_train, X_val, y_val):
     return train_loader, val_loader
 
 
-def train_model(device, train_loader, val_loader, model):
+def train_model(train_loader, val_loader, model):
     """
     Train the LSTM model using gradient accumulation.
     """
     optimizer = optim.Adam(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay
     )
-    scheduler = StepLR(optimizer, step_size=3, gamma=0.5)
-    criterion = nn.BCEWithLogitsLoss()
-    scaler = amp.GradScaler()
+    scheduler = StepLR(optimizer, step_size=3, gamma=0.1)
+    criterion = nn.BCELoss()
 
     wandb.init(project="sexism_detector_lstm")
 
@@ -102,20 +101,14 @@ def train_model(device, train_loader, val_loader, model):
 
         for i, (texts, labels) in enumerate(tqdm(train_loader, colour="magenta")):
             texts = texts.to(device)
-            labels = labels.double().to(device)
+            labels = labels.to(device)
 
-            with amp.autocast():
-                outputs = model(texts)
-                loss = criterion(outputs.squeeze(), labels)
+            outputs = model(texts)
+            loss = criterion(outputs.squeeze(), labels)
 
             optimizer.zero_grad()
-            scaler.scale(loss).backward()
-
-            scaler.unscale(optimizer)
-            clip_gradients(model, max_norm=1.0)
-
-            scaler.step(optimizer)
-            scaler.update()
+            loss.backward()
+            optimizer.step()
 
             epoch_loss += loss.item()
 
@@ -131,7 +124,7 @@ def train_model(device, train_loader, val_loader, model):
                 "optimizer_state_dict": optimizer.state_dict(),
                 "loss": best_val_loss,
             },
-            f"model/train/model_checkpoints/model_trained_{epoch}.pth",
+            f"model/model_checkpoints/model_trained_{epoch}.pth",
         )
         wandb.log(
             {
@@ -167,7 +160,7 @@ def validate_model(model, val_loader):
     """
     model.eval()
     val_loss = 0
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.BCELoss()
 
     with torch.no_grad():
         for texts, labels in tqdm(val_loader, colour="green"):
@@ -184,36 +177,24 @@ def validate_model(model, val_loader):
 
 
 def main():
-    # Free up memory before loading data
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
         torch.cuda.empty_cache()
 
-    path = "model/"
-
-    os.makedirs(f"{path}/model_checkpoints", exist_ok=True)
+    os.makedirs(f"model/model_checkpoints", exist_ok=True)
     with open(".key.txt", "r", encoding="UTF-8") as f:
         wandb_key = f.read().strip()
 
     wandb.login(key=wandb_key)
 
-    X_train, y_train, X_val, y_val = extract_divide_data()
+    train_loader, val_loader = prepare_loaders()
 
-    X_train, X_val, vocab = tokenize_input(
-        X_train, X_val, MAX_NB_WORDS=75000, MAX_SEQUENCE_LENGTH=500
-    )
-
-    train_loader, val_loader = prepare_loaders(X_train, y_train, X_val, y_val)
-
-    embeddings = TokenEmbedding(vocab)
-    model = LSTMModel(emb_dim, embeddings.idx_to_vec, dropout).to(device)
-    model.embedding.weight.data.copy_(embeddings.idx_to_vec)
-    model.apply(init_weights)
+    model = LSTMModel().to(device)
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    train_model(device, train_loader, val_loader, model)
+    train_model(train_loader, val_loader, model)
 
 
 if __name__ == "__main__":

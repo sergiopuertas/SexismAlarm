@@ -1,14 +1,22 @@
 import torch
 import torch.nn as nn
 
+from src.model.token_emb import TokenEmbedding
+
 
 class LSTMModel(nn.Module):
-    def __init__(self, embedding_dim, pretrained_embeddings, dropout=0.4):
+    def __init__(
+        self,
+        embedding_dim=200,
+        pretrained_embeddings="model/glove.twitter.27B.200d.txt",
+        dropout=0.5,
+    ):
         super().__init__()
 
-        # Embedding layer with pretrained embeddings
         self.embedding = nn.Embedding.from_pretrained(
-            pretrained_embeddings, padding_idx=0, freeze=True  # Disallow fine-tuning
+            TokenEmbedding(pretrained_embeddings, embedding_dim).token_to_vec,
+            padding_idx=0,
+            freeze=True,
         )
 
         hidden_size = 128
@@ -21,7 +29,8 @@ class LSTMModel(nn.Module):
             batch_first=True,
         )
 
-        # Layer normalization
+        self.apply(init_weights)
+
         self.layer_norm = nn.LayerNorm(hidden_size * 2)
         self.fc = nn.Linear(hidden_size * 2, 1)
 
@@ -34,15 +43,13 @@ class LSTMModel(nn.Module):
         lstm_out = lstm_out[:, -1, :]
 
         output = self.fc(lstm_out)
+        output = torch.sigmoid(output)
+
         return output
 
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-
-def clip_gradients(model, max_norm=1.0):
-    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_norm)
 
 
 def init_weights(m):
