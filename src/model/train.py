@@ -11,13 +11,14 @@ from sklearn.model_selection import train_test_split
 from model import LSTMModel
 from dataset import TextDataset
 from tensorflow.keras.preprocessing.sequence import pad_sequences
-
+from tensorflow.keras.preprocessing.text import Tokenizer
 
 # Hyperparameters
-batch_size = 32
+batch_size = 64
 num_epochs = 10
-learning_rate = 5e-3
-weight_decay = 1e-5
+learning_rate = 5e-4
+weight_decay = 1e-4
+lambda_attn = 0.001
 device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
 
@@ -27,66 +28,66 @@ def extract_divide_data():
     Returns:
         Tuple: Text and label data for training, validation, and test sets.
     """
-    seed = 141223
     df = pd.read_csv(f"data/dataset.csv")
     df = df.dropna(subset=["text", "label"])
 
-    X_train, X_val = train_test_split(
-        df, train_size=0.8, test_size=0.2, shuffle=True, random_state=seed
-    )
-    return (
-        X_train["text"].tolist(),
-        X_train["label"].tolist(),
-        X_val["text"].tolist(),
-        X_val["label"].tolist(),
-    )
+    return df["text"].tolist(), df["label"].tolist()
 
 
-def tokenize_input(X_train, X_val, padding_word="PAD"):
-    max_sequence_length = max(len(x) for x in X_train + X_val)
-    X_train_tokens = [x.split() for x in X_train]
-    X_val_tokens = [x.split() for x in X_val]
+def tokenize_input(text, MAX_SEQUENCE_LENGTH=500):
+    tokenizer = Tokenizer()
+    tokenizer.fit_on_texts(text)
+    sequences = tokenizer.texts_to_sequences(text)
+    word_index = tokenizer.word_index
 
-    text_tokens = X_train_tokens + X_val_tokens
-
+    print("Found %s unique tokens." % len(word_index))
     text_padded = pad_sequences(
-        text_tokens,
-        maxlen=max_sequence_length,
+        sequences,
+        maxlen=MAX_SEQUENCE_LENGTH,
         padding="post",
-        value=padding_word,
-        dtype=object,
+        value=0,
+        dtype="int32",
     )
 
-    X_train_padded = text_padded[: len(X_train)]
-    X_val_padded = text_padded[len(X_train) :]
-
-    return X_train_padded, X_val_padded
+    return text_padded, word_index
 
 
 def prepare_loaders():
     """
     Prepara los DataLoaders para entrenamiento y validación.
     """
-    X_train, y_train, X_val, y_val = extract_divide_data()
+    X, y = extract_divide_data()
 
-    X_train, X_val = tokenize_input(X_train, X_val)
-
+    X_padded, vocab = tokenize_input(X)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_padded, y, test_size=0.3, shuffle=True, random_state=141223
+    )
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_test, y_test, test_size=0.5, shuffle=True, random_state=141223
+    )
     train_dataset = TextDataset(X_train, y_train)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size)
 
     val_dataset = TextDataset(X_val, y_val)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
-    return train_loader, val_loader
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+
+    test_dataset = TextDataset(X_test, y_test)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+
+    torch.save(vocab, "model/vocab.pt")
+    torch.save(test_loader,"model/test_loader.pt")
+    return train_loader, val_loader,test_loader, vocab
 
 
-def train_model(train_loader, val_loader, model):
+def train_model():
     """
     Train the LSTM model using gradient accumulation.
     """
+    train_loader, val_loader,_, vocab= prepare_loaders()
+    model = LSTMModel(vocab).to(device)
     optimizer = optim.Adam(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
-    )
-    scheduler = StepLR(optimizer, step_size=3, gamma=0.1)
+        model.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=(0.9, 0.999),eps=1e-08)
+    scheduler = StepLR(optimizer, step_size=3, gamma=0.5)
     criterion = nn.BCELoss()
 
     wandb.init(project="sexism_detector_lstm")
@@ -99,12 +100,13 @@ def train_model(train_loader, val_loader, model):
         model.train()
         epoch_loss = 0
 
-        for i, (texts, labels) in enumerate(tqdm(train_loader, colour="magenta")):
-            texts = texts.to(device)
-            labels = labels.to(device)
+        for i, (text, label) in enumerate(tqdm(train_loader, colour="magenta")):
+            text, label = text.to(device), label.to(device)
 
-            outputs = model(texts)
-            loss = criterion(outputs.squeeze(), labels)
+            outputs, attn_penalty = model(text)
+
+            loss = criterion(outputs.squeeze(-1), label) + lambda_attn * attn_penalty
+
 
             optimizer.zero_grad()
             loss.backward()
@@ -113,18 +115,26 @@ def train_model(train_loader, val_loader, model):
             epoch_loss += loss.item()
 
         epoch_loss /= len(train_loader)
-        val_loss = validate_model(model, val_loader)
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for texts, labels in tqdm(val_loader, colour="green"):
+                text = texts.to(device)
+                label = labels.to(device)
+                outputs, _ = model(text)
+                outputs = outputs.squeeze()
+
+                loss = criterion(outputs, label)
+                val_loss += loss.item()
+
+        val_loss /= len(val_loader)
+
         print(
             f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss:.4f}, Validation Loss: {val_loss:.4f}"
-        )
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss": best_val_loss,
-            },
-            f"model/model_checkpoints/model_trained_{epoch}.pth",
         )
         wandb.log(
             {
@@ -154,47 +164,17 @@ def train_model(train_loader, val_loader, model):
                 break
 
 
-def validate_model(model, val_loader):
-    """
-    Validate the model.
-    """
-    model.eval()
-    val_loss = 0
-    criterion = nn.BCELoss()
-
-    with torch.no_grad():
-        for texts, labels in tqdm(val_loader, colour="green"):
-            texts = texts.to(device)
-            labels = labels.float().to(device)
-
-            outputs = model(texts)
-            outputs = outputs.squeeze()
-
-            loss = criterion(outputs, labels)
-            val_loss += loss.item()
-
-    return val_loss / len(val_loader)
-
-
 def main():
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
         torch.cuda.empty_cache()
 
-    os.makedirs(f"model/model_checkpoints", exist_ok=True)
     with open(".key.txt", "r", encoding="UTF-8") as f:
         wandb_key = f.read().strip()
 
     wandb.login(key=wandb_key)
 
-    train_loader, val_loader = prepare_loaders()
-
-    model = LSTMModel().to(device)
-
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-    train_model(train_loader, val_loader, model)
+    train_model()
 
 
 if __name__ == "__main__":

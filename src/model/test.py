@@ -1,9 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader
 from tqdm import tqdm
-from sklearn.model_selection import KFold
 from sklearn.metrics import (
     confusion_matrix,
     classification_report,
@@ -15,16 +13,12 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 import seaborn as sns
 from model import LSTMModel
-from dataset import TextDataset
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-import torch.nn.functional as F
-from data_cleaning import load_abbreviations,clean_txt
+
 device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
 # Hiperparámetros
 emb_dim = 200
-batch_size = 16
-num_folds = 5  # Aún se usa para la validación cruzada
+batch_size = 64
 
 
 def load_vocab(vocab_path):
@@ -55,40 +49,6 @@ def load_model(model_path, vocab):
     model.eval()  # Set model to evaluation mode
     return model
 
-
-def tokenize_input(vocab, padding_word=0, MAX_SEQUENCE_LEN = 500):
-    """
-    Tokeniza el input usando un vocabulario preexistente.
-    Args:
-        vocab (dict): Diccionario con las palabras del vocabulario.
-    """
-    df = pd.read_csv("data/dataset.csv")
-    df = df.dropna(subset=["text", "label"])
-    X = df["text"].tolist()
-    y = df["label"].tolist()
-
-    text_tokens = [x.split() for x in X]
-
-    # Convertimos las palabras a índices utilizando el vocabulario
-    text_indices = [
-        [vocab.get(word, vocab.get(padding_word, 0)) for word in sentence] for sentence in text_tokens
-    ]
-
-    # Padding para las secuencias
-    text_padded = pad_sequences(
-        text_indices,
-        maxlen=MAX_SEQUENCE_LEN,
-        padding="post",
-        value=vocab.get(padding_word, 0),  # Usamos un valor por defecto (0)
-        dtype="int32",
-    )
-    return text_padded, y
-
-
-def prepare_loader(X, y):
-    dataset = TextDataset(X, y)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    return loader
 
 
 def get_predictions(model, loader):
@@ -135,52 +95,27 @@ def evaluate_model(y_true, y_pred):
 
     plot_confusion_matrix(y_true, y_pred)
 
-
-def k_fold_cross_validation(model, num_folds, vocab):
-    kfold = KFold(n_splits=num_folds, shuffle=True, random_state=33)
-    fold_results = []
-    X, y = tokenize_input(vocab)
-    for fold, (_, test_idx) in enumerate(kfold.split(X)):
-        print(f"\nFold {fold + 1}/{num_folds}")
-
-        X_test = X[test_idx]
-        y_test = np.array(y)[test_idx]
-
-        test_loader = prepare_loader(X_test, y_test)
-
-        y_pred, y_true = get_predictions(model, test_loader)
-        fold_results.append((y_true, y_pred))
-
-    return fold_results
-
-
 def main():
     vocab_path = "model/vocab.pt"  # Ruta donde guardas el vocabulario
-    model_path = "model/model_trained.pth"
-    vocab = load_vocab(vocab_path)  # Cargar el vocabulario
+    model_path = "model/model_trained_cutreattention.pth"
+    loader_path = "model/test_loader.pt"
+    vocab = load_vocab(vocab_path)
 
     model = load_model(model_path, vocab)
+    loader = torch.load(loader_path)
     """
-    print("\nIniciando K-Fold Cross Validation...")
-    k_fold_results = k_fold_cross_validation(model, num_folds, vocab)
-
-    all_true = []
-    all_pred = []
-
-    for true, pred in k_fold_results:
-        all_true.extend(true.tolist())
-        all_pred.extend(pred.tolist())
-
+    all_true, all_pred = get_predictions(model, loader)
     evaluate_model(np.array(all_true), np.array(all_pred))
     """
-    print(predict_sentiment(model, "Women really do not belong in politics, it is a man thing", vocab))
+
+
+    print(predict_sentiment(model, "i like spaghetti", vocab))
 
 
 def predict_sentiment(net, sequence, vocab):
     """Predict the sentiment of a text sequence."""
-    abbreviation_dict = load_abbreviations("model/abb_dict.txt")
-    clean_text = clean_txt(sequence,abbreviation_dict)
-    sequence_tokens = clean_text.split()
+
+    sequence_tokens = sequence.split()
     sequence_indices = [vocab.get(word, 0) for word in sequence_tokens]
     sequence_tensor = torch.tensor(sequence_indices, device=device).long().unsqueeze(0)
     print(sequence_tokens)

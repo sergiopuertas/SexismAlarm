@@ -30,11 +30,16 @@ def similarity(c, build=False):
 
 
 @task
-def model(c, test=False):
+def model(c, test=False, back = False):
     if test:
         c.run("python model/test.py")
+    elif back:
+        c.run("nohup python model/train.py > output.log 2>&1 &")
+
     else:
+        c.run("export CUDA_LAUNCH_BLOCKING=1")
         c.run("python model/train.py")
+
 
 
 # @task
