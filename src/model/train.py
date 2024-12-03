@@ -8,17 +8,16 @@ from tqdm import tqdm
 import wandb
 from torch.optim.lr_scheduler import StepLR
 from sklearn.model_selection import train_test_split
-from model import LSTMModel
+from model import *
 from dataset import TextDataset
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 
 # Hyperparameters
 batch_size = 64
-num_epochs = 10
+num_epochs = 20
 learning_rate = 5e-4
 weight_decay = 1e-4
-lambda_attn = 0.001
 device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 
 
@@ -75,25 +74,30 @@ def prepare_loaders():
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
     torch.save(vocab, "model/vocab.pt")
-    torch.save(test_loader,"model/test_loader.pt")
-    return train_loader, val_loader,test_loader, vocab
+    torch.save(test_loader, "model/test_loader.pt")
+    return train_loader, val_loader, test_loader, vocab
 
 
 def train_model():
     """
     Train the LSTM model using gradient accumulation.
     """
-    train_loader, val_loader,_, vocab= prepare_loaders()
+    train_loader, val_loader, _, vocab = prepare_loaders()
     model = LSTMModel(vocab).to(device)
     optimizer = optim.Adam(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=(0.9, 0.999),eps=1e-08)
-    scheduler = StepLR(optimizer, step_size=3, gamma=0.5)
-    criterion = nn.BCELoss()
+        model.parameters(),
+        lr=learning_rate,
+        weight_decay=weight_decay,
+        betas=(0.9, 0.999),
+        eps=1e-08,
+    )
+    scheduler = StepLR(optimizer, step_size=5, gamma=0.75)
+    criterion = nn.BCEWithLogitsLoss()
 
     wandb.init(project="sexism_detector_lstm")
 
     best_val_loss = float("inf")
-    patience = 3
+    patience = 5
     patience_counter = 0
 
     for epoch in range(num_epochs):
@@ -101,12 +105,15 @@ def train_model():
         epoch_loss = 0
 
         for i, (text, label) in enumerate(tqdm(train_loader, colour="magenta")):
-            text, label = text.to(device), label.to(device)
+            text, label = text.to(device), label.to(device).float()
 
-            outputs, attn_penalty = model(text)
+            # Crear el mask para este batch
+            mask = create_padding_mask(text)
 
-            loss = criterion(outputs.squeeze(-1), label) + lambda_attn * attn_penalty
+            # Pasar texto y mask al modelo
+            outputs = model(text, mask=mask)
 
+            loss = criterion(outputs.squeeze(-1), label)
 
             optimizer.zero_grad()
             loss.backward()
@@ -123,12 +130,16 @@ def train_model():
         val_loss = 0
         with torch.no_grad():
             for texts, labels in tqdm(val_loader, colour="green"):
-                text = texts.to(device)
-                label = labels.to(device)
-                outputs, _ = model(text)
+                texts, labels = texts.to(device), labels.to(device).float()
+
+                # Crear el mask para este batch
+                mask = create_padding_mask(texts)
+
+                # Pasar texto y mask al modelo
+                outputs = model(texts, mask=mask)
                 outputs = outputs.squeeze()
 
-                loss = criterion(outputs, label)
+                loss = criterion(outputs, labels)
                 val_loss += loss.item()
 
         val_loss /= len(val_loader)
