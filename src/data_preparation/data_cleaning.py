@@ -127,9 +127,3 @@ def clean_csv(input_csv, output_csv, abb_dict="data_preparation/abb_dict.txt"):
 
     augmented_df = pd.DataFrame(synth_rows, columns=["text", "label", "set"])
     augmented_df.to_csv(output_csv, index=False)
-
-
-if __name__ == "__main__":
-    input_csv = "data/full_balanced.csv"
-    output_csv = "data/dataset.csv"
-    clean_csv(input_csv, output_csv)

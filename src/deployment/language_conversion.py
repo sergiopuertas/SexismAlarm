@@ -63,16 +63,15 @@ language_support = {
 }
 
 
-def main(text):
+def process_lang(text):
     lang = detect(text)
-    print(lang)
     if lang not in language_support:
-        print("do nothing")
+        return None
     elif lang == "en":
-        print("send text to model")
+        return text
     else:
         en_text = translate_text(text, lang)
-        print(en_text)
+        return en_text
 
 
 def translate_text(text, lang):  # copied: reference
@@ -86,9 +85,3 @@ def translate_text(text, lang):  # copied: reference
         task_name, model=model_name, tokenizer=model_name, device=device
     )
     return translator(text)[0]["translation_text"]
-
-
-if __name__ == "__main__":
-    # text = sys.argv[1]
-    text = "elles sont toutes des menteuses"
-    main(text)

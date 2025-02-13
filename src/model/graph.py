@@ -1,46 +1,17 @@
 from sentence_transformers import SentenceTransformer
 from scipy.spatial.distance import cosine
-import networkx as nx
-import matplotlib.pyplot as plt
-import torch
-from transformers import RobertaForSequenceClassification, RobertaTokenizer
 
 
 class ChatGraph:
-    def __init__(self, model_name, similarity_threshold=0.5, max_nodes=50):
+    def __init__(self, model_name, similarity_threshold=0.3, max_nodes=15):
         self.nodes = {}
         self.edges = []
         self.similarity_threshold = similarity_threshold
         self.max_nodes = max_nodes
         self.model = SentenceTransformer(model_name)
-        self.classificator = RobertaForSequenceClassification.from_pretrained('roberta-large-mnli')
-        self.clastokenizer = RobertaTokenizer.from_pretrained('roberta-large-mnli')
-        self.classificator.eval()
 
     def get_embedding(self, text):
         return self.model.encode(text)
-
-    def is_addition(self, reply_text, original_text):
-        if isinstance(original_text, list):
-            original_text = " ".join(original_text)
-        if isinstance(reply_text, list):
-            reply_text = " ".join(reply_text)
-
-        if not original_text or not reply_text:
-            return False
-
-        try:
-            tokens = self.clastokenizer(original_text,reply_text, return_tensors='pt', padding=True, truncation=True)
-            with torch.no_grad():
-                logits = self.classificator(**tokens).logits
-            print(logits)
-            results = torch.argmax(logits, dim=-1).item()
-
-            return False if results == 0 else True
-
-        except Exception as e:
-            print(f"Error en is_addition: {e}")
-            return False
 
     def add_message(self, msg_id, text, reply_to=None):
         if len(self.nodes) >= self.max_nodes:
@@ -49,13 +20,9 @@ class ChatGraph:
         self.nodes[msg_id] = text
 
         if reply_to and reply_to in self.nodes:
-            original_text = self.nodes[reply_to]
-            if self.is_addition(text, original_text):
-                self.edges.append((reply_to, msg_id))
-            else:
-                print(f"Mensaje {msg_id} en oposición a {reply_to}. No se conecta.")
-        else: self.create_similarity_edges(msg_id,text)
+            self.edges.append((reply_to, msg_id))
 
+        self.create_similarity_edges(msg_id, text)
 
     def create_similarity_edges(self, msg_id, new_text):
         new_embedding = self.get_embedding(new_text)
@@ -67,6 +34,7 @@ class ChatGraph:
                 self.edges.append((existing_id, msg_id))
 
     def prune_nodes(self):
+        """Elimina los nodos con menos conexiones cuando se supera el máximo."""
         node_degrees = {node: 0 for node in self.nodes}
         for edge in self.edges:
             node_degrees[edge[0]] += 1
@@ -103,21 +71,55 @@ class ChatGraph:
         plt.show()
 
     def get_concatenated_texts(self):
+        """Concatena frases conectadas para su análisis posterior."""
         groups = []
         visited = set()
 
         for node in self.nodes:
             if node not in visited:
-                direct_connections = self.get_direct_connections(node)
-                direct_connections.append(node)
-                visited.update(direct_connections)
-
-                concatenated_text = " CONNECTED ".join(self.nodes[n] for n in direct_connections)
+                group = self.dfs_collect(node, visited)
+                concatenated_text = " CONNECTED ".join(self.nodes[n] for n in group)
                 groups.append(concatenated_text)
 
         return groups
 
-    def get_direct_connections(self, node):
-        """Devuelve los nodos directamente conectados a un nodo dado."""
-        return [n2 if n1 == node else n1 for n1, n2 in self.edges if node in (n1, n2)]
+    def dfs_collect(self, node, visited):
+        """Realiza DFS para agrupar frases conectadas."""
+        stack = [node]
+        group = []
 
+        while stack:
+            current = stack.pop()
+            if current not in visited:
+                visited.add(current)
+                group.append(current)
+                stack.extend(
+                    [n2 for n1, n2 in self.edges if n1 == current]
+                    + [n1 for n1, n2 in self.edges if n2 == current]
+                )
+
+        return group
+
+
+graph = ChatGraph(model_name="all-mpnet-base-v2")
+
+graph.add_message(1, "There were many women at that party")
+graph.add_message(2, "The sky is blue")
+graph.add_message(3, "Yes, they were all sluts")
+graph.add_message(4, "All they wanted was dick")
+graph.add_message(5, "I like spaghetti")
+graph.add_message(6, "The weather is very cold today")
+graph.add_message(7, "Yes, it has been raining all day")
+graph.add_message(8, "Women don't know how to drive")
+graph.add_message(9, "That's an absurd stereotype")
+graph.add_message(10, "I hate when people don't respect traffic lights")
+graph.add_message(11, "Yesterday I was almost run over because of that")
+graph.add_message(12, "I love dogs")
+graph.add_message(13, "I prefer cats")
+graph.add_message(14, "I don't know what to do today")
+graph.add_message(15, "We could go to the movies")
+graph.add_message(16, "Women only care about money")
+graph.add_message(17, "That's not true, many women work and are independent")
+
+concatenated_texts = graph.get_concatenated_texts()
+print(concatenated_texts)
