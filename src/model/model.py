@@ -2,72 +2,78 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from token_emb import TokenEmbedding
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-
-def visualize_attention(inputs, attn_weights, idx_to_word):
-    """
-    Visualiza los pesos de atención para una entrada dada.
-    """
-    for i, (text, weights) in enumerate(zip(inputs, attn_weights)):
-        words = [idx_to_word[idx] for idx in text if idx != 0]  # Decodifica el texto
-        plt.figure(figsize=(12, 2))
-        sns.heatmap([weights[: len(words)]], annot=[words], fmt="", cmap="Blues")
-        plt.title(f"Attention Weights for Sample {i}")
-        plt.show()
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
 
 
 class SelfAttention(nn.Module):
     def __init__(self, attention_dim, attention_dropout=0.2):
-        super().__init__()
-        self.query_layer = nn.Linear(attention_dim, attention_dim)
-        self.key_layer = nn.Linear(attention_dim, attention_dim)
-        self.value_layer = nn.Linear(attention_dim, attention_dim)
-        self.attention_dropout = nn.Dropout(attention_dropout)
+        """
+        attention_dim: Dimensión de la representación (por ejemplo, hidden_size*2 para LSTM bidireccional)
+        attention_dropout: Dropout aplicado sobre los pesos de atención
+        """
+        super(SelfAttention, self).__init__()
+        self.query = nn.Linear(attention_dim, attention_dim)
+        self.key = nn.Linear(attention_dim, attention_dim)
+        self.value = nn.Linear(attention_dim, attention_dim)
+        self.dropout = nn.Dropout(attention_dropout)
+        self.scale = math.sqrt(attention_dim)
 
-    def scaled_dot_product_attention(self, query, key, value, mask=None):
+    def forward(self, x, mask=None):
         """
-        Calcula la atención con producto punto escalado.
+        x: tensor de forma (batch_size, seq_len, attention_dim)
+        mask: tensor de forma (batch_size, seq_len) con 1 para tokens reales y 0 para padding.
         """
-        d_k = query.size(-1)
-        scores = torch.matmul(query, key.transpose(-2, -1)) / torch.sqrt(
-            torch.tensor(d_k, dtype=torch.float32)
-        )
+        Q = self.query(x)  # (batch, seq_len, attention_dim)
+        K = self.key(x)  # (batch, seq_len, attention_dim)
+        V = self.value(x)  # (batch, seq_len, attention_dim)
+
+        # Producto punto escalado: (batch, seq_len, seq_len)
+        scores = torch.bmm(Q, K.transpose(1, 2)) / self.scale
 
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, float("-inf"))
+            scores = scores.masked_fill(mask.unsqueeze(1) == 0, -1e9)
 
-        attn_weights = F.softmax(scores, dim=-1)
-        attn_weights = self.attention_dropout(attn_weights)
+        attn_weights = F.softmax(scores, dim=-1)  # (batch, seq_len, seq_len)
+        attn_weights = self.dropout(attn_weights)
 
-        return torch.matmul(attn_weights, value), attn_weights
-
-    def forward(self, lstm_output, mask=None):
-        """
-        Aplica Self-Attention a las salidas de la LSTM.
-        """
-        query = self.query_layer(lstm_output)
-        key = self.key_layer(lstm_output)
-        value = self.value_layer(lstm_output)
-
-        attn_output, attn_weights = self.scaled_dot_product_attention(
-            query, key, value, mask
-        )
+        # Salida de la atención: combinación ponderada de V
+        attn_output = torch.bmm(attn_weights, V)  # (batch, seq_len, attention_dim)
         return attn_output, attn_weights
 
 
+# Función para inicializar pesos
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        nn.init.xavier_uniform_(m.weight)
+    elif isinstance(m, nn.LSTM):
+        for name, param in m.named_parameters():
+            if 'weight' in name:
+                nn.init.kaiming_normal_(param)
+
+
+# Modelo LSTM con Self-Attention
 class LSTMModel(nn.Module):
-    def __init__(self, vocab, embedding_dim=200, dropout=0.2, attention_dropout=0.2):
-        super().__init__()
-        # Embedding
+    def __init__(self, vocab, embedding_dim=200, dropout=0.4, attention_dropout=0.2):
+        """
+        vocab: Vocabulario para construir la matriz de embeddings.
+        embedding_dim: Dimensión de los embeddings.
+        dropout: Dropout aplicado en el LSTM y en las capas fully connected.
+        attention_dropout: Dropout aplicado sobre los pesos en la atención.
+        """
+        super(LSTMModel, self).__init__()
+
+        # Capa de embeddings
         self.embedding = nn.Embedding.from_pretrained(
             TokenEmbedding(vocab).idx_to_vec,
             padding_idx=0,
-            freeze=True,
+            freeze=False,
         ).to(torch.float32)
 
-        # LSTM
+        # LSTM bidireccional
         hidden_size = 256
         self.lstm = nn.LSTM(
             input_size=embedding_dim,
@@ -81,36 +87,72 @@ class LSTMModel(nn.Module):
 
         # Self-Attention
         self.attention = SelfAttention(
-            attention_dim=hidden_size * 2, attention_dropout=attention_dropout
+            embed_dim=hidden_size * 2,
+            dropout=attention_dropout
         )
 
-        # LayerNorm, Dropout, Fully Connected
+        # LayerNorm, Dropout y Capa final Fully Connected
         self.layer_norm = nn.LayerNorm(hidden_size * 2)
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_size * 2, 1)
 
     def forward(self, x, mask=None):
         """
-        Forward pass con residual connections y mask.
+        x: tensor de índices de tokens, shape (batch_size, seq_len)
+        mask: tensor opcional de shape (batch_size, seq_len) con 1 para tokens reales y 0 para padding.
         """
-        embedded = self.embedding(x)
-        lstm_output, _ = self.lstm(embedded)
+        # Paso 1: Embedding
+        embedded = self.embedding(x)  # (batch, seq_len, embedding_dim)
 
-        # Self-Attention con mask
-        attn_output, attn_weights = self.attention(lstm_output, mask)
+        # Paso 2: LSTM
+        lstm_output, _ = self.lstm(embedded)  # (batch, seq_len, hidden_size*2)
 
-        # Residual Connection: Combina las salidas de LSTM y atención
-        residual = lstm_output + attn_output
+        # Paso 3: Self-Attention
+        attn_output, attn_weights = self.attention(lstm_output)
+        # attn_output: (batch, seq_len, hidden_size*2)
+        # attn_weights: (batch, seq_len, seq_len)
 
-        # Agregación y LayerNorm
-        out = torch.sum(attn_weights.unsqueeze(-1) * residual, dim=1)
+        attn_context = torch.matmul(attn_weights, attn_output)  # (batch, seq_len, hidden_size*2)
+
+        # Mean pooling
+        out = attn_context.mean(dim=1)  # (batch, hidden_size*2)
+
+        # Normalización, Dropout y Capa final
         out = self.layer_norm(out)
-
-        # Dropout y Fully Connected
         out = self.dropout(out)
-        out = self.fc(out)
+        out = self.fc(out)  # (batch, 1)
+        out = out.squeeze(-1)  # (batch,)
         return out
 
+
+class SelfAttention(nn.Module):
+    """
+    Implementa un mecanismo de self-attention simple:
+    - Calcula proyecciones lineales para Q, K y V.
+    - Aplica producto punto escalado para obtener scores de atención.
+    - Utiliza softmax para normalizar y aplicar dropout.
+    """
+
+    def __init__(self, embed_dim, dropout=0.1):
+        super().__init__()
+        self.query = nn.Linear(embed_dim, embed_dim)
+        self.key = nn.Linear(embed_dim, embed_dim)
+        self.value = nn.Linear(embed_dim, embed_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.scale = torch.sqrt(torch.tensor(embed_dim, dtype=torch.float32))
+
+    def forward(self, x):
+        # x: (batch, seq_len, embed_dim)
+        Q = self.query(x)
+        K = self.key(x)
+        V = self.value(x)
+        # Calcular scores: (batch, seq_len, seq_len)
+        scores = torch.bmm(Q, K.transpose(1, 2)) / self.scale
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+        # Salida: (batch, seq_len, embed_dim)
+        out = torch.bmm(attn_weights, V)
+        return out, attn_weights
 
 def init_weights(m):
     if isinstance(m, nn.Linear):
@@ -118,11 +160,4 @@ def init_weights(m):
     elif isinstance(m, nn.LSTM):
         for param in m._flat_weights_names:
             if "weight" in param:
-                nn.init.xavier_uniform_(m._parameters[param])
-
-
-def create_padding_mask(seq, padding_idx=0):
-    """
-    Crea un mask para ignorar posiciones de padding.
-    """
-    return (seq != padding_idx).unsqueeze(1).unsqueeze(2)
+                nn.init.kaiming_normal_(m._parameters[param])

@@ -14,11 +14,13 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 
 # Hyperparameters
-batch_size = 64
+batch_size = 32
 num_epochs = 20
-learning_rate = 5e-4
-weight_decay = 1e-4
+learning_rate = 1e-4
+weight_decay = 5e-5
 device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
+max_train_data = None
+max_val_data = None
 
 
 def extract_divide_data():
@@ -29,6 +31,10 @@ def extract_divide_data():
     """
     df = pd.read_csv(f"data/dataset.csv")
     df = df.dropna(subset=["text", "label"])
+
+    # Limitar la cantidad de datos si se especifica un número
+    if max_train_data:
+        df = df[:max_train_data + max_val_data + 500]  # Se cargan datos suficientes para entrenamiento y validación
 
     return df["text"].tolist(), df["label"].tolist()
 
@@ -64,6 +70,13 @@ def prepare_loaders():
     X_val, X_test, y_val, y_test = train_test_split(
         X_test, y_test, test_size=0.5, shuffle=True, random_state=141223
     )
+
+    # Limitar el número de datos para entrenamiento y validación
+    if max_train_data:
+        X_train, y_train = X_train[:max_train_data], y_train[:max_train_data]
+    if max_val_data:
+        X_val, y_val = X_val[:max_val_data], y_val[:max_val_data]
+
     train_dataset = TextDataset(X_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=batch_size)
 
@@ -83,6 +96,7 @@ def train_model():
     Train the LSTM model using gradient accumulation.
     """
     train_loader, val_loader, _, vocab = prepare_loaders()
+
     model = LSTMModel(vocab).to(device)
     optimizer = optim.Adam(
         model.parameters(),
@@ -91,7 +105,7 @@ def train_model():
         betas=(0.9, 0.999),
         eps=1e-08,
     )
-    scheduler = StepLR(optimizer, step_size=5, gamma=0.75)
+    scheduler = StepLR(optimizer, step_size=5, gamma=0.5)
     criterion = nn.BCEWithLogitsLoss()
 
     wandb.init(project="sexism_detector_lstm")
@@ -107,11 +121,8 @@ def train_model():
         for i, (text, label) in enumerate(tqdm(train_loader, colour="magenta")):
             text, label = text.to(device), label.to(device).float()
 
-            # Crear el mask para este batch
-            mask = create_padding_mask(text)
-
             # Pasar texto y mask al modelo
-            outputs = model(text, mask=mask)
+            outputs = model(text)
 
             loss = criterion(outputs.squeeze(-1), label)
 
@@ -132,11 +143,8 @@ def train_model():
             for texts, labels in tqdm(val_loader, colour="green"):
                 texts, labels = texts.to(device), labels.to(device).float()
 
-                # Crear el mask para este batch
-                mask = create_padding_mask(texts)
-
                 # Pasar texto y mask al modelo
-                outputs = model(texts, mask=mask)
+                outputs = model(texts)
                 outputs = outputs.squeeze()
 
                 loss = criterion(outputs, labels)

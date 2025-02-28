@@ -8,10 +8,10 @@ class TextDataset(Dataset):
         Args:
             texts: A list where each entry is a list of words (tokens) for a text.
             labels: Optional; a list of labels corresponding to each text.
-            embedding: TokenEmbedding instance to convert tokens to indices.
         """
         self.texts = texts
         self.labels = labels
+
     def __len__(self):
         return len(self.texts)
 
@@ -22,4 +22,3 @@ class TextDataset(Dataset):
             return text, label
         else:
             return text
-
