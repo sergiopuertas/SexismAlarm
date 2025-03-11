@@ -1,39 +1,51 @@
 import discord
+import os
 import torch
-from sentence_transformers import SentenceTransformer
-from src.model.graph import ChatGraph
-from src.model.model import LSTMModel
-from language_conversion import process_lang
-from src.data_preparation.data_cleaning import clean_txt
+import requests
+from model.graph import ChatGraph
+from model.model import LSTMModel
+from dotenv import load_dotenv
+from data_preparation.data_cleaning import load_abbreviations, clean_txt
+from googletrans import Translator
 
-TOKEN = "TOKEN"
-GUILD_ID = "GUILD_ID"
-CHANNEL_ID = "CHANNEL_ID"
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+load_dotenv()
+TOKEN = os.getenv('TOKEN')
 
 intents = discord.Intents.default()
 intents.messages = True
+intents.members = True
 intents.guilds = True
+intents.message_content = True
 client = discord.Client(intents=intents)
 
+conversation_handlers = {}
+active_channels = set()
+paused_channels = set()
+
+sexist_words = open("deployment/sexist_words.txt").read().split()
+abbreviations = load_abbreviations("data_preparation/abb_dict.txt")
 
 class ConversationHandler:
-    def __init__(self, model_name="all-mpnet-base-v2"):
-        self.chat_graph = ChatGraph(model_name=model_name)
-        self.model_emb_dim = 200
-        self.vocab = self.load_vocab("model/vocab.pt")
-        self.model = SentenceTransformer(model_name)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.lstm_model = self.load_model(
-            "model/model_trained_cutreattention.pth", self.vocab
-        )
+    def __init__(self):
+        self.chat_graph = ChatGraph()
+        self.vocab = self.load_vocab("model/Versions/V2/vocab.pt")
+        self.lstm_model = self.load_model("model/Versions/V2/model_trained.pth")
 
     def add_message(self, msg_id, text, reply_to=None):
         self.chat_graph.add_message(msg_id, text, reply_to)
-
         concatenated_texts = self.chat_graph.get_concatenated_texts()
-
+        print(concatenated_texts)
         for concatenated_text in concatenated_texts:
             if text in concatenated_text:
+                if len(concatenated_text.split()) == 1:
+                    word = concatenated_text[0].lower()
+                    if word in sexist_words:
+                        return 1
+                    else:
+                        return 0
+
                 prediction = self.classify_message(concatenated_text)
                 return prediction
 
@@ -41,32 +53,45 @@ class ConversationHandler:
 
     def classify_message(self, text):
         indices = [self.vocab.get(token, 0) for token in text.split()]
-
-        input_tensor = (
-            torch.tensor(indices, dtype=torch.long).unsqueeze(0).to(self.device)
-        )
-
+        input_tensor = torch.tensor(indices, dtype=torch.long).unsqueeze(0).to(device)
         with torch.no_grad():
             output = self.lstm_model(input_tensor)
-
-        prediction = torch.sigmoid(output).squeeze().item()
-        return prediction
+        return torch.sigmoid(output).squeeze().item()
 
     def load_vocab(self, vocab_path):
-        vocab = torch.load(vocab_path)  # Cargamos el vocabulario guardado
-        return vocab
+        return torch.load(vocab_path)
 
-    def load_model(self, model_path, vocab):
-        model = LSTMModel(self.vocab, embedding_dim=self.model_emb_dim)
-        model.load_state_dict(
-            torch.load(model_path, map_location=self.device)["model_state_dict"]
-        )
-        model.to(self.device)
-        model.eval()  # Set model to evaluation mode
+    def load_model(self, model_path):
+        model = LSTMModel(self.vocab)
+        model.load_state_dict(torch.load(model_path, map_location=device)["model_state_dict"])
+        model.to(device)
+        model.eval()
         return model
 
+    def reset_graph(self):
+        """Reinicia el grafo de conversación"""
+        self.chat_graph = ChatGraph()
 
-conversation_handler = ConversationHandler()
+
+def get_conversation_handler(channel_id):
+    if channel_id not in conversation_handlers:
+        conversation_handlers[channel_id] = ConversationHandler()
+    return conversation_handlers[channel_id]
+
+
+def translate_text(text):
+    translator = Translator()
+    try:
+        detected = translator.detect(text)
+
+        if detected.lang == 'en':
+            return text
+
+        translation = translator.translate(text, dest='en')
+        return translation.text
+    except Exception as e:
+        print(f"Error de traducción: {e}")
+        return text
 
 
 @client.event
@@ -79,17 +104,94 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    msg_id = message.id
-    text = message.content
-    reply_to = message.reference.message_id if message.reference else None
+    channel_id = message.channel.id
+    content = message.content
 
-    text = process_lang(text)
-    text = clean_txt(text, "../data_preparation/abb_dict.txt")
+    # Comandos de administración
+    if content.startswith('!'):
+        if content == "!hello":
+            await message.channel.send("👋 Hello! Initializing sexism detector...")
+            active_channels.add(channel_id)
+            if paused_channels is not None : paused_channels.discard(channel_id)
+            get_conversation_handler(channel_id)
+            await message.channel.send("✅ Bot has been initialized in the channel")
+            return
 
-    prediction = conversation_handler.add_message(msg_id, text, reply_to)
+        elif content == "!stop":
+            if channel_id in conversation_handlers:
+                del conversation_handlers[channel_id]
+            active_channels.discard(channel_id)
+            paused_channels.discard(channel_id)
+            await message.channel.send("🛑 Bot stopped completely. All data removed.")
+            return
 
-    if prediction is not None and prediction > 0.5:
-        await message.reply("⚠️ **Este mensaje ha sido clasificado como Sexista**.")
+        elif content == "!pause":
+            if channel_id not in active_channels:
+                await message.channel.send("ℹ️ Bot not active in this channel. Use !hello to initialize.")
+                return
+
+            paused_channels.add(channel_id)
+            await message.channel.send("⏸️ Bot en pausa. Los mensajes no serán analizados pero los datos se conservan.")
+            return
+
+        elif content == "!resume":
+            if channel_id not in active_channels:
+                await message.channel.send("ℹ️ El bot no está activo en este canal. Usa !iniciar primero.")
+                return
+
+            if channel_id in paused_channels:
+                paused_channels.discard(channel_id)
+                await message.channel.send("▶️ Bot reanudado. Los mensajes serán analizados nuevamente.")
+            else:
+                await message.channel.send("ℹ️ El bot no estaba en pausa.")
+            return
+
+        elif content == "!clear":
+            if channel_id in conversation_handlers:
+                handler = conversation_handlers[channel_id]
+                handler.reset_graph()
+                await message.channel.send("🔄 Grafo de conversación reiniciado.")
+            else:
+                await message.channel.send("ℹ️ Primero inicia el bot con !iniciar")
+            return
+
+        elif content == "!help":
+            help_msg = """
+            **Comandos disponibles:**
+            !iniciar - Activa el análisis en este canal
+            !pause - Pausa el análisis sin borrar datos
+            !resume - Reanuda el análisis después de una pausa
+            !stop - Detiene completamente el bot y borra todos los datos
+            !clear - Reinicia el grafo de conversación
+            !help - Muestra esta ayuda
+            """
+            await message.channel.send(help_msg)
+            return
+
+    # Procesamiento de mensajes normales
+    if channel_id not in active_channels or channel_id in paused_channels:
+        return
+
+    handler = get_conversation_handler(channel_id)
+
+    try:
+        msg_id = message.id
+        reply_to = message.reference.message_id if message.reference else None
+        text = translate_text(message.content)
+        text = clean_txt(text, abbreviations)
+
+        print(f"Mensaje recibido: {text}")
+
+        prediction = handler.add_message(msg_id, text, reply_to)
+
+        print(f"Predicción del mensaje: {prediction}")
+
+        if prediction is not None and prediction > 0.5:
+            await message.reply("⚠️ **Este mensaje ha sido clasificado como Sexista**.")
+
+    except Exception as e:
+        print(f"Error procesando mensaje: {e}")
+        await message.channel.send("❌ Error procesando el mensaje.")
 
 
 client.run(TOKEN)

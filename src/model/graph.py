@@ -1,125 +1,115 @@
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import torch
 from sentence_transformers import SentenceTransformer
-from scipy.spatial.distance import cosine
-
+from sentence_transformers import util
 
 class ChatGraph:
-    def __init__(self, model_name, similarity_threshold=0.3, max_nodes=15):
+    def __init__(self, model_name = 'cross-encoder/nli-deberta-v3-large', max_nodes=10):
+        self.sim_threshold = 0.2
         self.nodes = {}
         self.edges = []
-        self.similarity_threshold = similarity_threshold
         self.max_nodes = max_nodes
-        self.model = SentenceTransformer(model_name)
+        self.nli_model_name = model_name
+        self.tokenizer = AutoTokenizer.from_pretrained(self.nli_model_name,use_fast = False)
+        self.nli_model = AutoModelForSequenceClassification.from_pretrained(self.nli_model_name)
 
-    def get_embedding(self, text):
-        return self.model.encode(text)
+        # Modelo para embeddings contextuales
+        self.embedding_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+
+        self.nli_model.eval()
+
+    def analyze_relation(self, text_a, text_b):
+        """Analiza la relación semántica entre dos textos con comprensión contextual"""
+        # Etiquetas del modelo: 0: contradicción, 1: entailment, 2: neutral
+        inputs = self.tokenizer(text_a, text_b, return_tensors='pt', truncation=True)
+        with torch.no_grad():
+            logits = self.nli_model(**inputs).logits
+        probs = torch.softmax(logits, dim=1).numpy()[0]
+        return probs
+
+    def contextual_similarity(self, text_a, text_b):
+        """Calcula similitud semántica con contexto conversacional"""
+        embeddings = self.embedding_model.encode([text_a, text_b])
+        return util.pytorch_cos_sim(embeddings[0], embeddings[1]).item()
+
+    def is_addition(self, reply_text, original_text):
+        if not original_text or not reply_text:
+            return False
+
+        try:
+            # Análisis de relación semántica
+            probs = self.analyze_relation(original_text, reply_text)
+
+            if probs.argmax() == 1:  # Entailment
+                print(f"Entailment detectado: {probs}")
+                return True
+            elif probs.argmax() == 0:  # Contradicción
+                print(f"Contradicción detectada: {probs}")
+                return False
+            else:  # Neutral
+                similarity = self.contextual_similarity(original_text, reply_text)
+                print(f"Similitud neutral: {similarity}")
+                return similarity > self.sim_threshold and self.context_relevance_check(reply_text, original_text)
+
+        except Exception as e:
+            print(f"Error en is_addition: {e}")
+            return False
+
+    def context_relevance_check(self, text_a, text_b):
+        """Verifica relevancia contextual usando embeddings de conversación completa"""
+        context_embedding = self.embedding_model.encode(" ".join(self.nodes.values()))
+        text_a_embed = self.embedding_model.encode(text_a)
+        text_b_embed = self.embedding_model.encode(text_b)
+
+        # Calcula similitud con el contexto general
+        sim_a = util.pytorch_cos_sim(context_embedding, text_a_embed).item()
+        sim_b = util.pytorch_cos_sim(context_embedding, text_b_embed).item()
+
+        return (sim_a + sim_b) / 2 > 0.6
 
     def add_message(self, msg_id, text, reply_to=None):
-        if len(self.nodes) >= self.max_nodes:
-            self.prune_nodes()
-
         self.nodes[msg_id] = text
 
-        if reply_to and reply_to in self.nodes:
-            self.edges.append((reply_to, msg_id))
+        if reply_to is not None and reply_to in self.nodes:
+            parent_text = self.nodes[reply_to]
+            if self.is_addition(text, parent_text):
+                self.edges.append((reply_to, msg_id))
+        else:
+            previous_keys = list(self.nodes.keys())
+            if msg_id in previous_keys:
+                previous_keys.remove(msg_id)
+            last_three = previous_keys[-3:] if previous_keys else []
+            for existing_id in last_three:
+                existing_text = self.nodes[existing_id]
+                if self.is_addition(text, existing_text):
+                    self.edges.append((existing_id, msg_id))
 
-        self.create_similarity_edges(msg_id, text)
-
-    def create_similarity_edges(self, msg_id, new_text):
-        new_embedding = self.get_embedding(new_text)
-        for existing_id, existing_text in self.nodes.items():
-            if existing_id == msg_id:
-                continue
-            similarity = 1 - cosine(new_embedding, self.get_embedding(existing_text))
-            if similarity > self.similarity_threshold:
-                self.edges.append((existing_id, msg_id))
-
-    def prune_nodes(self):
-        """Elimina los nodos con menos conexiones cuando se supera el máximo."""
-        node_degrees = {node: 0 for node in self.nodes}
-        for edge in self.edges:
-            node_degrees[edge[0]] += 1
-            node_degrees[edge[1]] += 1
-
-        sorted_nodes = sorted(node_degrees, key=node_degrees.get)
-        nodes_to_remove = sorted_nodes[: len(self.nodes) - self.max_nodes + 1]
-
-        self.nodes = {k: v for k, v in self.nodes.items() if k not in nodes_to_remove}
-        self.edges = [
-            (a, b)
-            for a, b in self.edges
-            if a not in nodes_to_remove and b not in nodes_to_remove
-        ]
-
-    def visualize_graph(self):
-        G = nx.Graph()
-        for node in self.nodes:
-            G.add_node(node, label=self.nodes[node])
-        for edge in self.edges:
-            G.add_edge(edge[0], edge[1])
-
-        plt.figure(figsize=(8, 6))
-        pos = nx.spring_layout(G)
-        labels = nx.get_node_attributes(G, "label")
-        nx.draw(
-            G,
-            pos,
-            with_labels=True,
-            labels=labels,
-            node_color="lightblue",
-            edge_color="gray",
-        )
-        plt.show()
+        return self.get_concatenated_texts()
 
     def get_concatenated_texts(self):
-        """Concatena frases conectadas para su análisis posterior."""
         groups = []
         visited = set()
 
-        for node in self.nodes:
+        # Ordenar los nodos por orden de aparición (asumiendo que el ID del mensaje es incremental)
+        sorted_nodes = sorted(self.nodes.keys())
+
+        for node in sorted_nodes:
             if node not in visited:
-                group = self.dfs_collect(node, visited)
-                concatenated_text = " CONNECTED ".join(self.nodes[n] for n in group)
+                # Obtener conexiones directas
+                connections = self.get_direct_connections(node)
+                connections.append(node)
+
+                # Ordenar las conexiones por orden de aparición
+                sorted_connections = sorted(connections, key=lambda x: x)
+
+                # Marcar como visitados
+                visited.update(sorted_connections)
+
+                # Concatenar los textos en orden
+                concatenated_text = " CONNECTED ".join(self.nodes[n] for n in sorted_connections)
                 groups.append(concatenated_text)
 
         return groups
 
-    def dfs_collect(self, node, visited):
-        """Realiza DFS para agrupar frases conectadas."""
-        stack = [node]
-        group = []
-
-        while stack:
-            current = stack.pop()
-            if current not in visited:
-                visited.add(current)
-                group.append(current)
-                stack.extend(
-                    [n2 for n1, n2 in self.edges if n1 == current]
-                    + [n1 for n1, n2 in self.edges if n2 == current]
-                )
-
-        return group
-
-
-graph = ChatGraph(model_name="all-mpnet-base-v2")
-
-graph.add_message(1, "There were many women at that party")
-graph.add_message(2, "The sky is blue")
-graph.add_message(3, "Yes, they were all sluts")
-graph.add_message(4, "All they wanted was dick")
-graph.add_message(5, "I like spaghetti")
-graph.add_message(6, "The weather is very cold today")
-graph.add_message(7, "Yes, it has been raining all day")
-graph.add_message(8, "Women don't know how to drive")
-graph.add_message(9, "That's an absurd stereotype")
-graph.add_message(10, "I hate when people don't respect traffic lights")
-graph.add_message(11, "Yesterday I was almost run over because of that")
-graph.add_message(12, "I love dogs")
-graph.add_message(13, "I prefer cats")
-graph.add_message(14, "I don't know what to do today")
-graph.add_message(15, "We could go to the movies")
-graph.add_message(16, "Women only care about money")
-graph.add_message(17, "That's not true, many women work and are independent")
-
-concatenated_texts = graph.get_concatenated_texts()
-print(concatenated_texts)
+    def get_direct_connections(self, node):
+        return [n2 if n1 == node else n1 for n1, n2 in self.edges if node in (n1, n2)]

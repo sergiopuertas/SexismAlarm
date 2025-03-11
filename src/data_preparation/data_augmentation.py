@@ -1,84 +1,69 @@
-import nlpaug.augmenter.word as naw
-import nltk
-import random
-from data_cleaning import clean_csv
 import pandas as pd
+import nlpaug.augmenter.word as naw
+import random
+from data_preparation.data_cleaning import clean_csv
 
-nltk.download("averaged_perceptron_tagger")
-
-word_repetition_map = {
-    "women": 2,
-    "man": 2,
-    "woman": 1,
-    "male": 1,
-    "female": 1,
-    "males": 1,
-    "females": 1,
-}
+target_words = ["men", "man", "woman", "women","male","female", "males","females"]
 
 
 def augment_text(text, aug_syn, repetitions):
-    # Aumentar una frase un número de veces determinado
-    augmented_texts = [aug_syn.augment(text)[0] for _ in range(repetitions)]
-    return augmented_texts
+    return [aug_syn.augment(text)[0] for _ in range(repetitions)]
+
+def contains_target_words(text, target_words):
+    return any(word in str(text) .lower() for word in target_words)
+
+def generate_connected_phrases(concat_pool, label, num_phrases=20000):
+    sentences = concat_pool['text'].tolist()
+    connected = []
+
+    while len(connected) < num_phrases:
+        num = random.randint(2, 5)
+        selected = random.sample(sentences, num)
+        selected = [str(sentence) for sentence in selected]
+        connected_text = " CONNECTED ".join(selected)
+        connected.append({'text': connected_text, 'label': label, 'set': '6'})
+
+    return pd.DataFrame(connected)
 
 
-def generate_conjunction_phrases(sentences, label, max_combinations=5):
-    # Generar nuevas frases concatenadas
-    new_sentences = []
-    for _ in range(len(sentences)):
-        chosen_sentences = random.sample(sentences, random.randint(2, max_combinations))
-        combined_sentence = " CONNECTED ".join(chosen_sentences)
-        new_sentences.append([combined_sentence, label, "6"])
-    return new_sentences
-
-
-def augment_dataset(df, repetition_map):
-    aug_syn = naw.SynonymAug()
-    sexist_sentences = df[df["label"] == 1]["text"].tolist()
-    non_sexist_sentences = df[df["label"] == 0]["text"].tolist()
-
-    augmented_rows = []
-
-    # Aumentar frases sexistas
-    augmented_sexist = []
-    for text in sexist_sentences:
-        augmented_sexist.extend(
-            [[aug_text, 1, "5"] for aug_text in augment_text(text, aug_syn, 3)]
+def main():
+    """clean_csv(
+        "data/full_v2.csv", "data/full_v2.csv", "data_preparation/abb_dict.txt"
         )
-    all_sexist = pd.DataFrame(augmented_sexist, columns=["text", "label", "set"])[
-        "text"
-    ].tolist()
-    augmented_rows.extend(generate_conjunction_phrases(all_sexist, 1))
+    print("limpio")"""
 
-    # Aumentar frases no sexistas
-    augmented_non_sexist = []
-    for text in non_sexist_sentences:
-        repetitions = max([repetition_map.get(word, 0) for word in text.split()])
-        if repetitions > 0:
-            augmented_non_sexist.extend(
-                [
-                    [aug_text, 0, "5"]
-                    for aug_text in augment_text(text, aug_syn, repetitions)
-                ]
-            )
-    all_non_sexist = pd.DataFrame(
-        augmented_non_sexist, columns=["text", "label", "set"]
-    )["text"].tolist()
-    augmented_rows.extend(generate_conjunction_phrases(all_non_sexist, 0))
-    return pd.DataFrame(augmented_rows, columns=["text", "label", "set"])
+    df = pd.read_csv("data/full_v2.csv")
+
+    sexist_original = df[df['label'] == 1]
+    non_sexist_original = df[df['label'] == 0]
+
+    aug_syn = naw.SynonymAug()
+    textos_sexistas = sexist_original['text'].tolist()
+    aumentados_sexistas = []
+
+    for i, texto in enumerate(textos_sexistas):
+        if i%2 == 0 :
+            if not any(target in str(texto) for target in target_words):
+                aumentados = augment_text(str(texto), aug_syn, 1)
+                aumentados_sexistas.extend(aumentados)
+
+
+    df_aumentado_sexista = pd.DataFrame({
+        'text': aumentados_sexistas,
+        'label': 1,
+    })
+
+    sexist_total = pd.concat([sexist_original, df_aumentado_sexista], ignore_index=True)
+    sexist_connected = generate_connected_phrases(sexist_total, 1)
+    non_sexist_connected = generate_connected_phrases(non_sexist_original, 0)
+
+    final_df = pd.concat([
+        sexist_total, non_sexist_original,
+        sexist_connected, non_sexist_connected
+    ], ignore_index=True)
+    print("acabó")
+    final_df.to_csv("data/dataset_full_v2.csv", index=False)
 
 
 if __name__ == "__main__":
-    clean_csv(
-        "data/full.csv", "data/full_balanced.csv", "data_preparation/abb_dict.txt"
-    )
-
-    df = pd.read_csv("data/full_balanced.csv")
-
-    print("Generando datos aumentados...")
-    augmented_df = augment_dataset(df, word_repetition_map)
-
-    df_final = pd.concat([df, augmented_df], ignore_index=True)
-
-    df_final.to_csv("data/dataset.csv", index=False)
+    main()

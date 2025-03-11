@@ -21,64 +21,6 @@ device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
 emb_dim = 200
 batch_size = 64
 
-# Diccionario de palabras sexistas
-sexist_words = {
-    "slut",
-    "sluts",
-    "slutty",
-    "sluttiest",
-    "whore",
-    "whores",
-    "whoring",
-    "whorish",
-    "hoe",
-    "hoes",
-    "ho",
-    "hos",
-    "bitch",
-    "bitches",
-    "bitchy",
-    "bitchier",
-    "bitchiest",
-    "bitching",
-    "cunt",
-    "cunts",
-    "cunty",
-    "skank",
-    "skanks",
-    "skanky",
-    "skankiest",
-    "harpy",
-    "harpies",
-    "shrew",
-    "shrews",
-    "shrewish",
-    "harlot",
-    "harlots",
-    "jezebel",
-    "jezebels",
-    "pimp",
-    "pimps",
-    "pimping",
-    "pimped",
-    "pimpish",
-    "sissy",
-    "sissies",
-    "sissified",
-    "deadbeat",
-    "deadbeats",
-    "spinster",
-    "spinsters",
-    "strumpet",
-    "strumpets",
-    "floozy",
-    "floozies",
-    "tart",
-    "tarts",
-    "tarty",
-    "feminazi",
-}
-
 
 def load_vocab(vocab_path):
     """
@@ -122,10 +64,6 @@ def get_predictions(model, loader):
             outputs = model(inputs)
 
             preds = torch.sigmoid(outputs)
-
-            """# Binariza con umbral 0.5
-            preds = (probs >= 0.5).int().cpu().numpy()"""
-
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
             lengths.extend((inputs != 0).sum(dim=1).cpu().numpy())
@@ -144,8 +82,6 @@ def plot_confusion_matrix(y_true, y_pred):
 
 
 def evaluate_model(y_true, y_pred):
-    print(f'y_pred: {y_pred}')
-    print(f'y_true: {y_true}')
     accuracy = accuracy_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred, average="binary")
     recall = recall_score(y_true, y_pred, average="binary")
@@ -165,19 +101,10 @@ def predict_sentiment(net, sequence, vocab):
 
     sequence_tokens = sequence.split()
 
-    # Si la entrada es una sola palabra
-    if len(sequence_tokens) == 1:
-        word = sequence_tokens[0].lower()
-        if word in sexist_words:
-            return "sexist"
-        else:
-            return "non sexist"
-
-
     # Procesa la frase con el modelo
     sequence_indices = [vocab.get(word, 0) for word in sequence_tokens]
     sequence_tensor = torch.tensor(sequence_indices, device=device).long().unsqueeze(0)
-
+    print(f"Sequence: {sequence_tensor}")
     with torch.no_grad():
         output = torch.sigmoid(net(sequence_tensor))
         print(output.item())
@@ -187,26 +114,26 @@ def predict_sentiment(net, sequence, vocab):
 
 
 def main():
-    torch.serialization.add_safe_globals([DataLoader])
-    vocab_path = "model/vocab.pt"
-    model_path = "model/model_trained.pth"
+    vocab_path = "model/Versions/V2/vocab.pt"
+    model_path = "model/Versions/V2/model_trained.pth"
     loader_path = "model/test_loader.pt"
+    print(f"using:{device}")
     vocab = load_vocab(vocab_path)
     model = load_model(model_path, vocab)
-    loader = torch.load(loader_path,weights_only=False)
+    """loader = torch.load(loader_path,weights_only=False)
 
     all_true, all_pred, all_lengths = get_predictions(model, loader)
     unique_values, counts = np.unique(all_true, return_counts=True)
     print(unique_values,counts)
     all_pred = (all_pred >= 0.5)
-    evaluate_model(np.array(all_true), np.array(all_pred))
+    evaluate_model(np.array(all_true), np.array(all_pred))"""
 
-    """# Interactive loop for predictions
+    # Interactive loop for predictions
     while True:
         text = input("Enter a text to analyze: ")
         if text == "exit":
             break
-        print(predict_sentiment(model, text, vocab))"""
+        print(predict_sentiment(model, text, vocab))
 
 
 if __name__ == "__main__":

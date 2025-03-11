@@ -33,16 +33,16 @@ def expand_abbreviations(text, abbreviation_dict):
 
 # Limpieza de texto usando expresiones regulares y NLTK
 def clean_txt(text, abbreviation_dict):
+    text = str(text)
     clean_text = " ".join(
         [word if word == "CONNECTED" else word.lower() for word in text.split()]
     )
     clean_text = replace_emojis_with_text(clean_text)
     clean_text = re.sub(r"http\S+", "url", clean_text)  # URLs
     clean_text = re.sub(r"(\S+)@\S+", r"\1", clean_text)  # Correos electrónicos
-    clean_text = re.sub(r"\b\d+(\.\d+)?\b", "number", clean_text)  # Números
-    clean_text = re.sub(r"@(\w+)", r"\1", clean_text)  # Menciones de usuario
-    clean_text = re.sub(r"mention(\d+)", "mention", clean_text)  # Menciones de usuario
-    clean_text = re.sub(r"#(\w+)", r"\1", clean_text)  # Hashtags
+    clean_text = re.sub(r"@(\w+)", "", clean_text)  # Usuarios
+    clean_text = re.sub(r"mention(\d+)", "", clean_text)  # Usuarios
+    clean_text = re.sub(r"(\w+)#(\w+)", r"\1", clean_text)  # Hashtags
     clean_text = re.sub(
         r"\b(?:jaja|jeje|haha|hehe|lol|lmao|lmfao)+\b", "laugh", clean_text
     )  # Risas
@@ -62,8 +62,8 @@ def clean_txt(text, abbreviation_dict):
         r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b", "date", clean_text
     )  # Fechas (e.g., 12-05-2021)
     clean_text = re.sub(
-        r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
-        "day",
+        r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b",
+        "day of week",
         clean_text,
     )  # Días de la semana
     clean_text = re.sub(
@@ -76,21 +76,13 @@ def clean_txt(text, abbreviation_dict):
     clean_text = re.sub(
         r"\b\d+[kKmM]\b", "number", clean_text
     )  # Números grandes (e.g., 5K, 2M)
-    clean_text = re.sub(
-        r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b", "phone number", clean_text
-    )  # Teléfonos comunes
+
     clean_text = re.sub(
         r"\b\d{1,2}:\d{2}:\d{2}(?:\s?[ap]m)?\b", "time", clean_text
     )  # Horas con segundos (e.g., 10:30:45)
     clean_text = re.sub(
-        r"\b(?:mon|tue|wed|thu|fri|sat|sun)\b", "day", clean_text
-    )  # Abreviaturas de días (e.g., Mon, Tue)
-    clean_text = re.sub(
         r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", "month", clean_text
     )  # Abreviaturas de meses
-    clean_text = re.sub(
-        r"\b\d{4}\b", "year", clean_text
-    )  # Años de cuatro dígitos (e.g., 2023)
     clean_text = re.sub(
         r"\b(?:p\.?m\.?|a\.?m\.?)\b", "", clean_text
     )  # Quita 'am' y 'pm' dejando solo la hora
@@ -101,29 +93,33 @@ def clean_txt(text, abbreviation_dict):
     clean_text = re.sub(r"[{}]".format(re.escape(string.punctuation)), "", clean_text)
     clean_text = expand_abbreviations(clean_text, abbreviation_dict)
 
-    # clean_text = spell(clean_text)
+    clean_text = spell(clean_text)
     clean_text = [lemmatizer.lemmatize(token) for token in clean_text]
     clean_text = "".join(clean_text)
     return clean_text
 
+def clean_message(text,abb_dict="data_preparation/abb_dict.txt"):
+    abbreviation_dict = load_abbreviations(abb_dict)
+    return clean_txt(text, abbreviation_dict)
+
 
 # Función para limpiar un archivo CSV
 def clean_csv(input_csv, output_csv, abb_dict="data_preparation/abb_dict.txt"):
-    print(1)
     abbreviation_dict = load_abbreviations(abb_dict)
-    print(2)
     df = pd.read_csv(input_csv)
-    print(3)
     synth_rows = []
     for i, row in df.iterrows():
         text = row["text"]
         label = row["label"]
-        set_value = row["set"]
         if i % 1000 == 0:
             print(f"Processing text nº{i}")
 
         clean_text = clean_txt(text, abbreviation_dict)
-        synth_rows.append([clean_text, label, set_value])
+        synth_rows.append([clean_text, label])
 
-    augmented_df = pd.DataFrame(synth_rows, columns=["text", "label", "set"])
+    augmented_df = pd.DataFrame(synth_rows, columns=["text", "label"])
     augmented_df.to_csv(output_csv, index=False)
+
+
+if __name__ == "__main__":
+    clean_csv("data/dataset_full_v2.csv", "data/dataset_full_v2_clean.csv")

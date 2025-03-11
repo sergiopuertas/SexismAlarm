@@ -29,12 +29,12 @@ def extract_divide_data():
     Returns:
         Tuple: Text and label data for training, validation, and test sets.
     """
-    df = pd.read_csv(f"data/dataset.csv")
+    df = pd.read_csv(f"data/dataset_full_v2_clean.csv")
     df = df.dropna(subset=["text", "label"])
 
     # Limitar la cantidad de datos si se especifica un número
     if max_train_data:
-        df = df[:max_train_data + max_val_data + 500]  # Se cargan datos suficientes para entrenamiento y validación
+        df = df[:max_train_data + max_val_data + 500]
 
     return df["text"].tolist(), df["label"].tolist()
 
@@ -121,7 +121,6 @@ def train_model():
         for i, (text, label) in enumerate(tqdm(train_loader, colour="magenta")):
             text, label = text.to(device), label.to(device).float()
 
-            # Pasar texto y mask al modelo
             outputs = model(text)
 
             loss = criterion(outputs.squeeze(-1), label)
@@ -143,7 +142,6 @@ def train_model():
             for texts, labels in tqdm(val_loader, colour="green"):
                 texts, labels = texts.to(device), labels.to(device).float()
 
-                # Pasar texto y mask al modelo
                 outputs = model(texts)
                 outputs = outputs.squeeze()
 
