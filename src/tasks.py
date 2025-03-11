@@ -19,24 +19,6 @@ def clean(c, back=False):
 
 
 @task
-def requirements(c):
-    c.run("docker build -t requirements -f docker/ReqDockerfile .")
-
-
-@task
-def similarity(c, build=False):
-    if build:
-        c.run("docker build -f docker/SimDockerfile -t similarity-app .")
-
-    first = input("Enter the first sentence: ")
-    second = input("Enter the second sentence: ")
-
-    c.run(
-        f"docker run -v hug_model:/app/huggingface similarity-app python /app/similarity.py '{first}' '{second}'"
-    )
-
-
-@task
 def model(c, test=False, back=False):
     if test:
         c.run("python3.11 model/test.py")
@@ -48,5 +30,6 @@ def model(c, test=False, back=False):
         c.run("python3.11 model/train.py")
 
 
-# @task
-#  def run(c):
+@task
+def run(c):
+    c.run("python3.11 deployment/bot.py")
