@@ -1,0 +1,7 @@
+services:
+  sexism-alarm:
+    build: .
+    container_name: sexism-alarm
+    restart: unless-stopped
+    env_file: .env
+    command: python bot.py
