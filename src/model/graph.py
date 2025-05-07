@@ -5,7 +5,7 @@ from sentence_transformers import util
 
 class ChatGraph:
     def __init__(self, model_name = 'cross-encoder/nli-deberta-v3-large', max_nodes=10):
-        self.sim_threshold = 0.2
+        self.sim_threshold = 0.4
         self.nodes = {}
         self.edges = []
         self.max_nodes = max_nodes
@@ -39,7 +39,7 @@ class ChatGraph:
         try:
             # Análisis de relación semántica
             probs = self.analyze_relation(original_text, reply_text)
-
+            print(probs)
             if probs.argmax() == 1:  # Entailment
                 print(f"Entailment detectado: {probs}")
                 return True

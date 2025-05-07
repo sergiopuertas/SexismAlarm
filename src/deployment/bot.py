@@ -2,10 +2,10 @@ import discord
 import os
 import torch
 import requests
-from model.graph import ChatGraph
-from model.model import LSTMModel
+from graph import ChatGraph
+from model import LSTMModel
 from dotenv import load_dotenv
-from data_preparation.data_cleaning import load_abbreviations, clean_txt
+from data_cleaning import clean_message
 from googletrans import Translator
 
 
@@ -24,14 +24,13 @@ conversation_handlers = {}
 active_channels = set()
 paused_channels = set()
 
-sexist_words = open("deployment/sexist_words.txt").read().split()
-abbreviations = load_abbreviations("data_preparation/abb_dict.txt")
+sexist_words = open("sexist_words.txt").read().split()
 
 class ConversationHandler:
     def __init__(self):
         self.chat_graph = ChatGraph()
-        self.vocab = self.load_vocab("model/Versions/V2/vocab.pt")
-        self.lstm_model = self.load_model("model/Versions/V2/model_trained.pth")
+        self.vocab = self.load_vocab("vocab.pt")
+        self.lstm_model = self.load_model("model_trained.pth")
 
     def add_message(self, msg_id, text, reply_to=None):
         self.chat_graph.add_message(msg_id, text, reply_to)
@@ -157,13 +156,13 @@ async def on_message(message):
 
         elif content == "!help":
             help_msg = """
-            **Comandos disponibles:**
-            !iniciar - Activa el análisis en este canal
-            !pause - Pausa el análisis sin borrar datos
-            !resume - Reanuda el análisis después de una pausa
-            !stop - Detiene completamente el bot y borra todos los datos
-            !clear - Reinicia el grafo de conversación
-            !help - Muestra esta ayuda
+            **Available commands:**
+            !hello - Activates the bot in the channel
+            !pause - Pauses the analysis without deleting data
+            !resume - Resumes the analysis after a pause
+            !stop - Completely stops the bot and deletes all data
+            !clear - Resets the conversation graph
+            !help - Displays the help prompt
             """
             await message.channel.send(help_msg)
             return
@@ -178,7 +177,7 @@ async def on_message(message):
         msg_id = message.id
         reply_to = message.reference.message_id if message.reference else None
         text = translate_text(message.content)
-        text = clean_txt(text, abbreviations)
+        text = clean_message(text)
 
         print(f"Mensaje recibido: {text}")
 

@@ -21,7 +21,7 @@ def generate_connected_phrases(concat_pool, label, num_phrases=20000):
         selected = random.sample(sentences, num)
         selected = [str(sentence) for sentence in selected]
         connected_text = " CONNECTED ".join(selected)
-        connected.append({'text': connected_text, 'label': label, 'set': '6'})
+        connected.append({'text': connected_text, 'label': label})
 
     return pd.DataFrame(connected)
 

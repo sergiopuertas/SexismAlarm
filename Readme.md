@@ -45,13 +45,18 @@ Packaged with Docker, you can deploy it on any machine without worrying about de
    git clone https://github.com/your-username/sexism-alarm.git
    cd sexism-alarm
    ```
-
-2. Create a `.env` file in the root directory with your Discord token and optional variables:
+2. Decompress the `src/model/Versions/V2model_trained.zip` file into the `src/model/Versions/V2` directory:
+   ```bash
+   unzip `src/model/Versions/V2model_trained.zip -d src/model/Versions/V2/
+   ```
+   Idem with vocab.pt.zip and glove.twitter.27B.200d.txt.zip files
+3. Create a `.env` file in the root directory with your Discord token and optional variables:
    ```
    DISCORD_TOKEN=your_token_here
    ```
-
-3. Build and run the bot:
+4. Download the embeddings and locate them inside the `src/model/` directory:
+   https://nlp.stanford.edu/data/glove.twitter.27B.zip
+5. Build and run the bot:
    ```bash
    docker-compose up -d
    ```

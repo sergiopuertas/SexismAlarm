@@ -98,13 +98,13 @@ def clean_txt(text, abbreviation_dict):
     clean_text = "".join(clean_text)
     return clean_text
 
-def clean_message(text,abb_dict="data_preparation/abb_dict.txt"):
+def clean_message(text,abb_dict="abb_dict.txt"):
     abbreviation_dict = load_abbreviations(abb_dict)
     return clean_txt(text, abbreviation_dict)
 
 
 # Función para limpiar un archivo CSV
-def clean_csv(input_csv, output_csv, abb_dict="data_preparation/abb_dict.txt"):
+def clean_csv(input_csv, output_csv, abb_dict="abb_dict.txt"):
     abbreviation_dict = load_abbreviations(abb_dict)
     df = pd.read_csv(input_csv)
     synth_rows = []
@@ -120,6 +120,3 @@ def clean_csv(input_csv, output_csv, abb_dict="data_preparation/abb_dict.txt"):
     augmented_df = pd.DataFrame(synth_rows, columns=["text", "label"])
     augmented_df.to_csv(output_csv, index=False)
 
-
-if __name__ == "__main__":
-    clean_csv("data/dataset_full_v2.csv", "data/dataset_full_v2_clean.csv")
