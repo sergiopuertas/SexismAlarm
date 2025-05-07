@@ -1,78 +1,119 @@
 # Sexism Alarm Bot 🤖🚨
 
-Un bot de Discord que detecta y alerta mensajes sexistas usando un modelo de IA entrenado.  
-Empaquetado con Docker para que puedas desplegarlo en cualquier máquina sin preocuparte por dependencias.
+A Discord bot that detects and alerts sexist messages using a trained AI model.  
+Packaged with Docker so you can deploy it on any machine without worrying about dependencies.
 
----
+<div align="center">
+  
+![Sexism Alarm Bot](https://via.placeholder.com/800x400?text=Sexism+Alarm+Bot)
 
-## 📋 Índice
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=flat&logo=discord&logoColor=white)](https://discord.com/)
+[![Python](https://img.shields.io/badge/python-3.9-blue.svg)](https://www.python.org/)
 
-- [Características](#-características)  
-- [Requisitos](#-requisitos)  
-- [Instalación](#-instalación)  
-- [Configuración](#-configuración)  
-- [Uso con Docker Compose](#-uso-con-docker-compose)  
-- [Desarrollo](#-desarrollo)  
-- [Contribuir](#-contribuir)  
-- [Licencia](#-licencia)  
+</div>
 
----
+## 📋 Table of Contents
+- [Features](#-features)
+- [Requirements](#-requirements)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Using Docker Compose](#-using-docker-compose)
+- [Development](#-development)
+- [Contributing](#-contributing)
+- [License](#-license)
 
-## 🚀 Características
+## 🚀 Features
 
-- Detecta contenido sexista en mensajes de Discord.  
-- Basado en un modelo BiLSTM + Self-Attention personalizado.  
-- Usa análisis de sentimientos y clasificación NLI con Hugging Face.  
-- Traducción automática de respuestas con `googletrans`.  
-- Fácil de desplegar gracias a Docker & Docker Compose.  
+- **Smart Detection**: Identifies sexist content in Discord messages
+- **Custom AI Model**: Built on BiLSTM + Self-Attention architecture
+- **Advanced NLP**: Uses sentiment analysis and NLI classification with Hugging Face
+- **Multilingual Support**: Automatic translation of responses with `googletrans`
+- **Easy Deployment**: Simple setup with Docker & Docker Compose
 
----
+## 🛠️ Requirements
 
-## 🛠️ Requisitos
+- [Docker >= 20.10](https://docs.docker.com/get-docker/)
+- [Docker Compose >= 1.29](https://docs.docker.com/compose/install/)
+- (Optional) Git to clone the repository
 
-- [Docker >= 20.10](https://docs.docker.com/get-docker/)  
-- [Docker Compose >= 1.29](https://docs.docker.com/compose/install/)  
-- (Opcional) Git para clonar el repo  
+## ⚙️ Installation
 
----
-
-## ⚙️ Instalación
-
-1. Clona este repositorio:
+1. Clone this repository:
    ```bash
-   git clone https://github.com/tu-usuario/sexism-alarm.git
+   git clone https://github.com/your-username/sexism-alarm.git
    cd sexism-alarm
-'''
-2. Crea un fichero .env en la raíz con tu token de Discord y, opcionalmente, otras variables:
-DISCORD_TOKEN=tu_token_aquí
+   ```
 
-## 📝 Configuración
+2. Create a `.env` file in the root directory with your Discord token and optional variables:
+   ```
+   DISCORD_TOKEN=your_token_here
+   ```
+
+3. Build and run the bot:
+   ```bash
+   docker-compose up -d
+   ```
+
+## 📝 Configuration
 
 ### .env
-Guarda aquí tu DISCORD_TOKEN y cualquier otra variable.
+Store your `DISCORD_TOKEN` and any other environment variables here.
 
 ### requirements.txt
-Define las dependencias Python necesarias para inference.
+Defines the Python dependencies needed for inference.
 
 ### Dockerfile
-Construye la imagen con todo lo necesario (modelos, corpora NLTK, cache de Transformers).
+Builds an image with everything needed (models, NLTK corpora, Transformers cache).
 
 ### docker-compose.yml
-Orquesta el servicio de forma sencilla.
+Orchestrates the service in a simple way.
 
-## 🐳 Uso con Docker Compose
-Levanta el bot con un solo comando (construye la imagen si ha cambiado):
+## 🐳 Using Docker Compose
 
-## 🤝 Contribuir
-Haz un fork de este repositorio.
-Crea una rama (git checkout -b feature/mi-mejora).
-Realiza tus cambios y commitea (git commit -m "Añade nueva funcionalidad").
-Envía un Pull Request.
+Start the bot with a single command (builds the image if it has changed):
 
-## 📄 Licencia
-Este proyecto está bajo la licencia MIT. Consulta el fichero LICENSE para más detalles.
+```bash
+docker-compose up -d
+```
 
+To view logs:
+```bash
+docker-compose logs -f
+```
 
+To stop the bot:
+```bash
+docker-compose down
+```
 
+## 💻 Development
 
+To run the bot in development mode:
 
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Run the bot locally
+python bot.py
+```
+
+## 🤝 Contributing
+
+1. Fork this repository
+2. Create a branch (`git checkout -b feature/my-improvement`)
+3. Make your changes and commit (`git commit -m "Add new feature"`)
+4. Push to your branch (`git push origin feature/my-improvement`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+  <sub>Built with ❤️ by your-username</sub>
+</div>
