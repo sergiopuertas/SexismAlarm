@@ -1,18 +1,14 @@
 # Sexism Alarm Bot 🤖🚨
 
-A Discord bot that detects and alerts sexist messages using a custom trained AI model.  
-Packaged with Docker so you can deploy it on any machine without worrying about dependencies.
-
 <div align="center">
 
-![Logo del Proyecto](logo.jpeg)
-
+<img src="logo.jpeg" alt="Sexism Alarm Bot" width="400" />
 
 [[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)]((https://www.apache.org/licenses/LICENSE-2.0))
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=flat&logo=discord&logoColor=white)](https://discord.com/)
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
-
+A Discord bot that detects and alerts sexist messages using a custom trained AI model. Packaged with Docker, you can deploy it on any machine without worrying about dependencies.
 </div>
 
 ## 📋 Table of Contents
