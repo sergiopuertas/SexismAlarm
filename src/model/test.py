@@ -114,9 +114,10 @@ def predict_sentiment(net, sequence, vocab):
 
 
 def main():
-    vocab_path = "model/Versions/V2/vocab.pt"
-    model_path = "model/Versions/V2/model_trained.pth"
-    loader_path = "model/test_loader.pt"
+    version = 2
+    vocab_path = f"model/Versions/V{version}/vocab.pt"
+    model_path = f"model/Versions/V{version}/model_trained.pth"
+    loader_path = f"model/Versions/V{version}/test_loader.pt"
     print(f"using:{device}")
     vocab = load_vocab(vocab_path)
     model = load_model(model_path, vocab)

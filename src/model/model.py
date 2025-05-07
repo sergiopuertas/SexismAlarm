@@ -98,7 +98,7 @@ class SelfAttention(nn.Module):
         return out, attn_weights
 
 class TokenEmbedding:  # inspired in d2L
-    def __init__(self, vocab, embedding_file="model/glove.twitter.27B.200d.txt"):
+    def __init__(self, vocab, embedding_file="glove.twitter.27B.200d.txt"):
         self.idx_to_token = list(vocab.keys())
         self.token_to_idx = vocab
         self.idx_to_vec = self._load_embedding(embedding_file)

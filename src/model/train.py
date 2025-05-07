@@ -86,8 +86,8 @@ def prepare_loaders():
     test_dataset = TextDataset(X_test, y_test)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
-    torch.save(vocab, "model/vocab.pt")
-    torch.save(test_loader, "model/test_loader.pt")
+    torch.save(vocab, "model/Versions/V4/vocab.pt")
+    torch.save(test_loader, "model/Versions/V4/test_loader.pt")
     return train_loader, val_loader, test_loader, vocab
 
 
@@ -172,7 +172,7 @@ def train_model():
                     "optimizer_state_dict": optimizer.state_dict(),
                     "loss": best_val_loss,
                 },
-                "model/model_trained.pth",
+                "model/Versions/V4/model_trained.pth",
             )
         else:
             patience_counter += 1
