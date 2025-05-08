@@ -60,14 +60,13 @@ Packaged with Docker, you can deploy it on any machine without worrying about de
 
 ## 📝 Configuration
 
+### Discord Bot
+Go to https://discord.com/developers/docs/intro and create your Discord Bot.
+Get its URL and append the following permissions at the back: &scope=bot&permissions=274877982720 .
+Retrieve your token.
+
 ### .env
 Store your `DISCORD_TOKEN` and any other environment variables here.
-
-### requirements.txt
-Defines the Python dependencies needed for inference.
-
-### Dockerfile
-Builds an image with everything needed (models, NLTK corpora, Transformers cache).
 
 ### docker-compose.yml
 Orchestrates the service in a simple way.
