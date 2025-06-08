@@ -176,8 +176,8 @@ async def on_message(message):
     try:
         msg_id = message.id
         reply_to = message.reference.message_id if message.reference else None
-        text = translate_text(message.content)
-        text = clean_message(text)
+        text = clean_message(message.content)
+        text = translate_text(text)
 
         print(f"Mensaje recibido: {text}")
 
